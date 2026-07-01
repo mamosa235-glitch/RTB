@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { CalendarDaysIcon, Settings } from 'lucide-react';
+import { CalendarDaysIcon, Settings, Download, CheckCircle2 } from 'lucide-react';
 import { translations, Language } from '@/lib/translations';
 import { formatBalance, saveBalance } from '@/lib/gameLogic';
 
@@ -12,6 +12,7 @@ interface GameHeaderProps {
 
 export default function GameHeader({ balance }: GameHeaderProps) {
   const [lang, setLang] = useState<Language>('en');
+  const [downloadStatus, setDownloadStatus] = useState<'idle' | 'loading' | 'success'>('idle');
 
   useEffect(() => {
     const updateLang = () => {
@@ -20,8 +21,40 @@ export default function GameHeader({ balance }: GameHeaderProps) {
     };
     updateLang();
     window.addEventListener('storage', updateLang);
+
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      setDownloadStatus('success');
+    }
+
     return () => window.removeEventListener('storage', updateLang);
   }, []);
+
+  const handleDownloadOffline = () => {
+    if (!('serviceWorker' in navigator)) {
+      alert('Navegador no compatible.');
+      return;
+    }
+
+    setDownloadStatus('loading');
+
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      if (reg.active) {
+        setTimeout(() => setDownloadStatus('success'), 2000);
+      }
+      reg.onupdatefound = () => {
+        const sw = reg.installing;
+        if (sw) {
+          sw.onstatechange = () => {
+            if (sw.state === 'installed') {
+              setDownloadStatus('success');
+            }
+          };
+        }
+      };
+    }).catch(() => {
+      setDownloadStatus('idle');
+    });
+  };
 
   const t = translations[lang] || translations.en;
 
@@ -95,6 +128,25 @@ export default function GameHeader({ balance }: GameHeaderProps) {
         >
           <CalendarDaysIcon size={14} />
         </Link>
+
+        <button
+          onClick={handleDownloadOffline}
+          disabled={downloadStatus === 'loading'}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 focus:outline-none focus:ring-2"
+          style={{
+            color: downloadStatus === 'success' ? '#4ade80' : 'rgba(168,85,247,0.9)',
+            border: `1px solid ${downloadStatus === 'success' ? 'rgba(34,197,94,0.4)' : 'rgba(168,85,247,0.25)'}`,
+            background: downloadStatus === 'success' ? 'rgba(34,197,94,0.05)' : 'rgba(168,85,247,0.05)'
+          }}
+        >
+          {downloadStatus === 'loading' ? (
+            <div className="w-3.5 h-3.5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          ) : downloadStatus === 'success' ? (
+            <CheckCircle2 size={14} />
+          ) : (
+            <Download size={14} />
+          )}
+        </button>
 
         <Link
           href="/settings"
