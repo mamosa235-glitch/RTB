@@ -22,8 +22,18 @@ export default function GameHeader({ balance }: GameHeaderProps) {
     updateLang();
     window.addEventListener('storage', updateLang);
 
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      setDownloadStatus('success');
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then((reg) => {
+        if (reg.active) setDownloadStatus('success');
+        reg.onupdatefound = () => {
+          const sw = reg.installing;
+          if (sw) {
+            sw.onstatechange = () => {
+              if (sw.state === 'installed') setDownloadStatus('success');
+            };
+          }
+        };
+      });
     }
 
     return () => window.removeEventListener('storage', updateLang);

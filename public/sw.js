@@ -1,20 +1,24 @@
-const CACHE_NAME = 'rtb-v11-fixed';
+const CACHE_NAME = 'rtb-v12-final';
 
-const ASSETS = [
+// Llista de totes les pàgines i recursos del teu joc
+const APP_FILES = [
   '/',
   '/index.html',
   '/manifest.json',
   '/favicon.ico',
   '/icon.png',
   '/daily-rewards',
-  '/settings'
+  '/settings',
+  '/daily-rewards.html',
+  '/settings.html'
 ];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
+      console.log('Pre-caching app shell');
+      return cache.addAll(APP_FILES);
     })
   );
 });
@@ -33,13 +37,24 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((res) => {
-        if (res.status === 200) {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
-        }
+      // Si el tenim a cache, el retornem (molt ràpid)
+      if (cached) return cached;
+
+      // Si no, l'anem a buscar i el guardem per a la pròxima vegada
+      return fetch(event.request).then((res) => {
+        if (!res || res.status !== 200) return res;
+
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then(cache => {
+          cache.put(event.request, copy);
+        });
         return res;
-      }).catch(() => caches.match('/'));
+      }).catch(() => {
+        // SI NO HI HA INTERNET i és una pàgina, tornem la home
+        if (event.request.mode === 'navigate') {
+          return caches.match('/');
+        }
+      });
     })
   );
 });
