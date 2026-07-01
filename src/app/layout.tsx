@@ -59,7 +59,20 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js');
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                    reg.onupdatefound = function() {
+                      var installingWorker = reg.installing;
+                      installingWorker.onstatechange = function() {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                          alert('Actualització llista! Tanca i obre l\\'app.');
+                        } else if (installingWorker.state === 'installed') {
+                          alert('Joc llest per jugar offline!');
+                        }
+                      };
+                    };
+                  });
+                });
               }
             `,
           }}
