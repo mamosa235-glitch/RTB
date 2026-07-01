@@ -1,8 +1,9 @@
-const CACHE_NAME = 'rtb-v4-pro';
+const CACHE_NAME = 'rtb-v6';
 
-// Fitxers mínims per arrancar
-const INITIAL_CACHE = [
+// Fitxers crítics inicials
+const PRECACHE = [
   '/',
+  '/index.html',
   '/manifest.json',
   '/favicon.ico',
   '/icon.png'
@@ -10,7 +11,7 @@ const INITIAL_CACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(INITIAL_CACHE))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
   );
   self.skipWaiting();
 });
@@ -29,25 +30,25 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      // Si el tenim a la cache, el donem ja (velocitat màxima)
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Si la resposta és bona, actualitzem la cache en segon pla (Stale-while-revalidate)
-        if (networkResponse && networkResponse.status === 200) {
-          const cacheCopy = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, cacheCopy);
-          });
+      // Si el tenim a la cache, el retornem immediatament
+      if (cached) {
+        return cached;
+      }
+
+      // Si no el tenim, l'anem a buscar a internet i el guardem
+      return fetch(event.request).then((response) => {
+        if (response.status === 200) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
         }
-        return networkResponse;
-      }).catch((err) => {
-        // SI NO HI HA INTERNET:
+        return response;
+      }).catch(() => {
+        // Si no hi ha internet i és una pàgina, intentem carregar la home
         if (event.request.mode === 'navigate') {
           return caches.match('/');
         }
-        throw err;
+        return null;
       });
-
-      return cached || fetchPromise;
     })
   );
 });
