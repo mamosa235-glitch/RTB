@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">redorblack</string>
+    <string name="title_activity_main">redorblack</string>
+    <string name="package_name">com.maxms.app</string>
+    <string name="custom_url_scheme">com.maxms.app</string>
+</resources>
