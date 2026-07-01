@@ -1,17 +1,21 @@
-const CACHE_NAME = 'rtb-ultimate-v2';
+const CACHE_NAME = 'rtb-v11-fixed';
 
-// Lista de activos básicos
-const PRECACHE_ASSETS = [
+const ASSETS = [
   '/',
+  '/index.html',
   '/manifest.json',
   '/favicon.ico',
-  '/icon.png'
+  '/icon.png',
+  '/daily-rewards',
+  '/settings'
 ];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS))
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(ASSETS);
+    })
   );
 });
 
@@ -28,26 +32,14 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.match(event.request).then((cachedResponse) => {
-        const fetchPromise = fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            cache.put(event.request, networkResponse.clone());
-          }
-          return networkResponse;
-        }).catch(() => {
-          return cachedResponse;
-        });
-
-        return cachedResponse || fetchPromise;
-      });
+    caches.match(event.request).then((cached) => {
+      return cached || fetch(event.request).then((res) => {
+        if (res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        }
+        return res;
+      }).catch(() => caches.match('/'));
     })
   );
-});
-
-// Escuchar mensaje para forzar cache de todo
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
 });

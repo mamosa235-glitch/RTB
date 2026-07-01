@@ -38,9 +38,13 @@ export default function GameHeader({ balance }: GameHeaderProps) {
     setDownloadStatus('loading');
 
     navigator.serviceWorker.register('/sw.js').then((reg) => {
-      if (reg.active) {
-        setTimeout(() => setDownloadStatus('success'), 2000);
+      // Si el service worker ya está haciendo algo o está activo
+      if (reg.active || reg.installing || reg.waiting) {
+        setTimeout(() => {
+          setDownloadStatus('success');
+        }, 2000);
       }
+
       reg.onupdatefound = () => {
         const sw = reg.installing;
         if (sw) {

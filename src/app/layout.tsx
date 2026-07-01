@@ -58,41 +58,11 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              (function() {
-                if ('serviceWorker' in navigator) {
-                  function register() {
-                    navigator.serviceWorker.register('/sw.js').then(function(reg) {
-                      console.log('SW Registered');
-                      reg.onupdatefound = function() {
-                        var sw = reg.installing;
-                        sw.onstatechange = function() {
-                          if (sw.state === 'installed') {
-                            var div = document.createElement('div');
-                            div.style.position = 'fixed';
-                            div.style.top = '0';
-                            div.style.left = '0';
-                            div.style.width = '100%';
-                            div.style.background = '#4ade80';
-                            div.style.color = 'black';
-                            div.style.textAlign = 'center';
-                            div.style.padding = '10px';
-                            div.style.zIndex = '9999';
-                            div.style.fontWeight = 'bold';
-                            div.innerText = '✅ JOC BAIXAT! JA POTS JUGAR SENSE WIFI';
-                            document.body.appendChild(div);
-                            setTimeout(function() { div.remove(); }, 5000);
-                          }
-                        };
-                      };
-                    });
-                  }
-                  if (document.readyState === 'complete') {
-                    register();
-                  } else {
-                    window.addEventListener('load', register);
-                  }
-                }
-              })();
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                  console.log('Offline mode ready');
+                });
+              }
             `,
           }}
         />
