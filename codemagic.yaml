@@ -23,7 +23,10 @@ workflows:
             -scheme "$XCODE_SCHEME" \
             -configuration Debug \
             -sdk iphoneos \
-            -derivedDataPath build/ios
+            -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
       - name: Package for AltStore (.ipa)
         script: |
           mkdir -p build/ios/Payload
