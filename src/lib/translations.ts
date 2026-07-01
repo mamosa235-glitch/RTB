@@ -47,7 +47,7 @@ export const translations = {
     buyPickaxe: 'Buy Pickaxe'
   },
   ca: {
-    gameTitle: 'MEUCA',
+    gameTitle: 'PUJA AL BUS',
     settings: 'Configuració',
     audio: 'Àudio',
     gameSounds: 'Sons del Joc',
@@ -94,7 +94,7 @@ export const translations = {
     buyPickaxe: 'Comprar Pico'
   },
   eu: {
-    gameTitle: 'ETA',
+    gameTitle: 'AUTOBUSEAN IBILI',
     settings: 'Ezarpenak',
     audio: 'Audioa',
     gameSounds: 'Jokoaren Soinuak',
@@ -141,7 +141,7 @@ export const translations = {
     buyPickaxe: 'Pikotxa Erosi'
   },
   es: {
-    gameTitle: 'PIMPINELA',
+    gameTitle: 'SUBE AL BUS',
     settings: 'Ajustes',
     audio: 'Audio',
     gameSounds: 'Sonidos del Juego',
