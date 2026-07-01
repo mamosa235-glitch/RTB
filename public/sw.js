@@ -1,16 +1,17 @@
-const CACHE_NAME = 'rtb-cache-v1';
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'rtb-v3';
+
+// Només fitxers que estem 100% segurs que existeixen a la carpeta /public
+const PRECACHE_ASSETS = [
   '/',
-  '/index.html',
   '/manifest.json',
-  '/icon.png',
   '/favicon.ico',
+  '/icon.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return cache.addAll(PRECACHE_ASSETS);
     })
   );
   self.skipWaiting();
@@ -18,13 +19,9 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then((keys) => {
       return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
+        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
       );
     })
   );
@@ -32,22 +29,32 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request).then((fetchResponse) => {
-        return caches.open(CACHE_NAME).then((cache) => {
-          // Cache common assets dynamically
-          if (event.request.method === 'GET' &&
-              (event.request.url.startsWith(self.location.origin) ||
-               event.request.url.includes('fonts.googleapis.com') ||
-               event.request.url.includes('fonts.gstatic.com'))) {
-            cache.put(event.request, fetchResponse.clone());
-          }
-          return fetchResponse;
-        });
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      return fetch(event.request).then((networkResponse) => {
+        // Si la resposta és vàlida, la guardem a la cache per a la pròxima vegada
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      }).catch(() => {
+        // SI NO HI HA INTERNET i és una navegació (una pàgina), mostra la principal
+        if (event.request.mode === 'navigate') {
+          return caches.match('/');
+        }
+        return null;
       });
-    }).catch(() => {
-      // Offline fallback can be added here
     })
   );
 });
