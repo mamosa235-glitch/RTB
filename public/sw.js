@@ -1,7 +1,7 @@
-const CACHE_NAME = 'rtb-v3';
+const CACHE_NAME = 'rtb-v4-pro';
 
-// Només fitxers que estem 100% segurs que existeixen a la carpeta /public
-const PRECACHE_ASSETS = [
+// Fitxers mínims per arrancar
+const INITIAL_CACHE = [
   '/',
   '/manifest.json',
   '/favicon.ico',
@@ -10,20 +10,16 @@ const PRECACHE_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(INITIAL_CACHE))
   );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-      );
-    })
+    caches.keys().then((keys) => Promise.all(
+      keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+    ))
   );
   self.clients.claim();
 });
@@ -31,30 +27,27 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  const url = new URL(event.request.url);
-
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request).then((networkResponse) => {
-        // Si la resposta és vàlida, la guardem a la cache per a la pròxima vegada
+    caches.match(event.request).then((cached) => {
+      // Si el tenim a la cache, el donem ja (velocitat màxima)
+      const fetchPromise = fetch(event.request).then((networkResponse) => {
+        // Si la resposta és bona, actualitzem la cache en segon pla (Stale-while-revalidate)
         if (networkResponse && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
+          const cacheCopy = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
+            cache.put(event.request, cacheCopy);
           });
         }
         return networkResponse;
-      }).catch(() => {
-        // SI NO HI HA INTERNET i és una navegació (una pàgina), mostra la principal
+      }).catch((err) => {
+        // SI NO HI HA INTERNET:
         if (event.request.mode === 'navigate') {
           return caches.match('/');
         }
-        return null;
+        throw err;
       });
+
+      return cached || fetchPromise;
     })
   );
 });
