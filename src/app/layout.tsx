@@ -17,11 +17,18 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'RedOrBlack — The Classic Card Prediction Game',
+  title: 'Ride the Bus — The Classic Card Prediction Game',
   description:
-    'Play RedOrBlack — a 4-stage card prediction game. Guess Red/Black, Higher/Lower, Inside/Outside, and the Suit to win.',
+    'Play Ride the Bus — a 4-stage card prediction game. Guess Red/Black, Higher/Lower, Inside/Outside, and the Suit to win.',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Ride the Bus',
+  },
   icons: {
     icon: [{ url: '/favicon.ico', type: 'image/x-icon' }],
+    apple: [{ url: '/icon.png' }],
   },
 };
 
