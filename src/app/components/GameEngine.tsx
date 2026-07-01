@@ -111,22 +111,22 @@ function BetInput({ balance, onStartGame }: BetInputProps) {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center flex-1 w-full gap-4 px-2">
-      <div className="w-full rounded-2xl p-5 relative overflow-hidden" style={{ background: 'rgba(0,0,0,0.8)', border: '1px solid rgba(59,130,246,0.5)', boxShadow: '0 0 60px rgba(59, 130, 246, 0.7), inset 0 0 35px rgba(59, 130, 246, 0.25)', animation: 'pulse-glow 15s infinite ease-in-out' }}>
-        <p className="text-center text-xs uppercase tracking-widest mb-6 font-black" style={{ color: '#60a5fa', letterSpacing: '0.3em', textShadow: '0 0 15px rgba(59,130,246,0.6)' }}>{t.placeYourBet}</p>
-        <div className="space-y-6 mb-2">
-          <div className="flex flex-col gap-4">
+    <div className="flex flex-col items-center justify-center flex-1 w-full gap-4 px-6 md:px-12 lg:px-24 py-10">
+      <div className="w-full max-w-3xl rounded-[2.5rem] p-10 md:p-16 relative" style={{ background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(59,130,246,0.5)', boxShadow: '0 0 120px rgba(59, 130, 246, 0.5), inset 0 0 60px rgba(59, 130, 246, 0.2)', animation: 'pulse-glow 8s infinite ease-in-out', willChange: 'transform, box-shadow', transform: 'translateZ(0)' }}>
+        <p className="text-center text-sm md:text-xl uppercase tracking-[0.5em] mb-12 font-black" style={{ color: '#60a5fa', textShadow: '0 0 20px rgba(59,130,246,0.7)' }}>{t.placeYourBet}</p>
+        <div className="space-y-12 mb-10">
+          <div className="flex flex-col gap-10">
             <div className="flex flex-col items-center">
-              <span className="text-4xl font-black text-green-500 tabular-nums" style={{ textShadow: '0 0 15px rgba(34,197,94,0.4)' }}>
+              <span className="text-6xl md:text-9xl font-black text-green-500 tabular-nums" style={{ textShadow: '0 0 30px rgba(34,197,94,0.6)' }}>
                 ${balance === 0 ? '0' : betStr}
               </span>
             </div>
-            <input type="range" min={5} max={maxBet} step={5} value={balance === 0 ? 5 : betStr} disabled={balance === 0} onChange={e => { setBetStr(e.target.value); setError(''); }} className={`w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500 ${balance === 0 ? 'opacity-20' : ''}`} style={{ background: balance === 0 ? '#1e293b' : `linear-gradient(to right, #22c55e 0%, #22c55e ${percentage}%, #1e293b ${percentage}%, #1e293b 100%)` }} />
-            <div className="flex justify-between px-1 text-[10px] font-bold text-slate-600"><span>$5</span><span>${maxBet}</span></div>
+            <input type="range" min={5} max={maxBet} step={5} value={balance === 0 ? 5 : betStr} disabled={balance === 0} onChange={e => { setBetStr(e.target.value); setError(''); }} className={`w-full h-4 md:h-8 bg-slate-800 rounded-2xl appearance-none cursor-pointer accent-green-500 ${balance === 0 ? 'opacity-20' : ''}`} style={{ background: balance === 0 ? '#1e293b' : `linear-gradient(to right, #22c55e 0%, #22c55e ${percentage}%, #1e293b ${percentage}%, #1e293b 100%)` }} />
+            <div className="flex justify-between px-2 text-sm md:text-xl font-bold text-slate-500"><span>$5</span><span>${maxBet}</span></div>
           </div>
         </div>
-        {error && <p className="text-center text-xs mb-2" style={{ color: '#ef4444' }}>{error}</p>}
-        <button className="w-full py-4 rounded-xl font-bold text-base uppercase tracking-widest transition-all duration-300 focus:outline-none active:scale-95" style={{ background: 'linear-gradient(135deg, #fb923c, #f97316, #ea580c)', color: '#ffffff', border: '1px solid rgba(255, 255, 255, 0.2)', boxShadow: '0 0 25px rgba(249,115,22,0.5), inset 0 0 10px rgba(255,255,255,0.2)', letterSpacing: '0.2em' }} onClick={handleSubmit}>{t.play}</button>
+        {error && <p className="text-center text-base md:text-lg mb-6 font-bold" style={{ color: '#ef4444' }}>{error}</p>}
+        <button className="w-full py-6 md:py-10 rounded-[1.5rem] md:rounded-[2rem] font-black text-xl md:text-4xl uppercase tracking-[0.3em] transition-all duration-300 focus:outline-none active:scale-95 shadow-2xl" style={{ background: 'linear-gradient(135deg, #fb923c, #f97316, #ea580c)', color: '#ffffff', border: '1px solid rgba(255, 255, 255, 0.3)', boxShadow: '0 0 50px rgba(249,115,22,0.5)', letterSpacing: '0.2em' }} onClick={handleSubmit}>{t.play}</button>
       </div>
     </div>
   );
@@ -297,12 +297,12 @@ export default function GameEngine() {
   const potentialPayout = currentBet > 0 ? currentBet * getStageMultiplier(stageIndex) : 0;
 
   return (
-    <div className="flex flex-col felt-bg relative" style={{ height: '100dvh', maxHeight: '100dvh', overflow: 'hidden' }}>
+    <div className="flex flex-col felt-bg relative" style={{ height: '100dvh', maxHeight: '100dvh' }}>
       {showGameOver && overallResult && (
         <GameOverOverlay result={overallResult} drawnCards={drawnCards} stageResults={stageResults} stats={stats} payout={currentBet * 20} onPlayAgain={() => { setShowGameOver(false); setStage('idle'); }} />
       )}
       <GameHeader balance={balance} />
-      <main className="flex flex-col items-center justify-center px-3 pb-3 pt-2 max-w-lg mx-auto w-full relative" style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+      <main className="flex flex-col items-center justify-center px-4 pb-12 pt-4 max-w-full md:max-w-[90%] lg:max-w-[80%] mx-auto w-full relative" style={{ flex: 1, minHeight: 0 }}>
         {stage === 'idle' ? (
           <BetInput balance={balance} onStartGame={startGame} />
         ) : (
@@ -323,13 +323,13 @@ export default function GameEngine() {
         {/* Zero Balance Purple Box */}
         {balance === 0 && stage === 'idle' && (
           <div
-            className="absolute bottom-10 left-4 right-4 bg-purple-900/80 rounded-2xl p-6 flex flex-col items-center justify-center border-4 border-purple-500 overflow-hidden"
+            className="absolute bottom-10 left-4 right-4 md:left-20 md:right-20 bg-purple-900/80 rounded-3xl p-8 md:p-12 flex flex-col items-center justify-center border-4 border-purple-500 overflow-hidden"
             style={{
-              animation: 'pulse-glow-purple 6s infinite ease-in-out',
-              boxShadow: '0 0 60px rgba(168, 85, 247, 0.7), inset 0 0 35px rgba(168, 85, 247, 0.25)'
+              animation: 'pulse-glow-purple 4s infinite ease-in-out',
+              boxShadow: '0 0 80px rgba(168, 85, 247, 0.6), inset 0 0 40px rgba(168, 85, 247, 0.3)'
             }}
           >
-            <span className="text-white font-black text-2xl uppercase tracking-widest text-center" style={{ textShadow: '0 0 10px rgba(168, 85, 247, 0.8)' }}>
+            <span className="text-white font-black text-3xl md:text-5xl uppercase tracking-[0.2em] text-center" style={{ textShadow: '0 0 15px rgba(168, 85, 247, 0.8)' }}>
               Tens $0
             </span>
           </div>

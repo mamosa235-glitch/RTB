@@ -13,9 +13,9 @@ interface PlayingCardProps {
 }
 
 const SIZE_MAP = {
-  sm: { outer: 'w-16 h-24 md:w-20 md:h-28', rank: 'text-lg', suit: 'text-base', center: 'text-3xl' },
-  md: { outer: 'w-24 h-36 md:w-28 md:h-40', rank: 'text-xl', suit: 'text-base', center: 'text-4xl' },
-  lg: { outer: 'w-28 h-44 md:w-36 md:h-52', rank: 'text-2xl', suit: 'text-xl', center: 'text-5xl' },
+  sm: { outer: 'w-16 h-24 md:w-24 md:h-36 lg:w-28 lg:h-42', rank: 'text-lg md:text-xl', suit: 'text-base', center: 'text-3xl md:text-4xl' },
+  md: { outer: 'w-24 h-36 md:w-32 md:h-48 lg:w-40 lg:h-60', rank: 'text-xl md:text-2xl', suit: 'text-base md:text-xl', center: 'text-4xl md:text-6xl' },
+  lg: { outer: 'w-28 h-44 md:w-44 md:h-64 lg:w-52 lg:h-80', rank: 'text-2xl md:text-3xl', suit: 'text-xl md:text-2xl', center: 'text-5xl md:text-8xl' },
 };
 
 export default function PlayingCard({

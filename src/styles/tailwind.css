@@ -240,19 +240,23 @@
 
   @keyframes pulse-glow {
     0%, 100% {
-      box-shadow: 0 0 60px rgba(59, 130, 246, 0.7), inset 0 0 35px rgba(59, 130, 246, 0.25);
+      box-shadow: 0 0 50px rgba(59, 130, 246, 0.5), inset 0 0 30px rgba(59, 130, 246, 0.2);
+      transform: scale(1);
     }
     50% {
-      box-shadow: 0 0 85px rgba(59, 130, 246, 1), inset 0 0 55px rgba(59, 130, 246, 0.4);
+      box-shadow: 0 0 120px rgba(59, 130, 246, 0.8), inset 0 0 60px rgba(59, 130, 246, 0.4);
+      transform: scale(1.01);
     }
   }
 
   @keyframes pulse-glow-purple {
     0%, 100% {
-      box-shadow: 0 0 60px rgba(168, 85, 247, 0.7), inset 0 0 35px rgba(168, 85, 247, 0.25);
+      box-shadow: 0 0 50px rgba(168, 85, 247, 0.5), inset 0 0 30px rgba(168, 85, 247, 0.2);
+      transform: scale(1);
     }
     50% {
-      box-shadow: 0 0 85px rgba(168, 85, 247, 1), inset 0 0 55px rgba(168, 85, 247, 0.4);
+      box-shadow: 0 0 120px rgba(168, 85, 247, 0.8), inset 0 0 60px rgba(168, 85, 247, 0.4);
+      transform: scale(1.01);
     }
   }
 
