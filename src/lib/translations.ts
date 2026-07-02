@@ -44,7 +44,8 @@ export const translations = {
     fuel: 'Fuel',
     creeperAlert: 'CREEPER! TAP FAST!',
     died: 'You died! Wait until tomorrow or buy a new pickaxe.',
-    buyPickaxe: 'Buy Pickaxe'
+    buyPickaxe: 'Buy Pickaxe',
+    enter: 'Enter',
   },
   ca: {
     gameTitle: 'PUJA AL BUS',
@@ -91,7 +92,8 @@ export const translations = {
     fuel: 'Carbó',
     creeperAlert: 'UN CREEPER! PICA RÀPID!',
     died: 'Has mort! Espera a demà o compra un pico nou.',
-    buyPickaxe: 'Comprar Pico'
+    buyPickaxe: 'Comprar Pico',
+    enter: 'Entrar',
   },
   eu: {
     gameTitle: 'AUTOBUSEAN IBILI',
@@ -138,7 +140,8 @@ export const translations = {
     fuel: 'Ikatza',
     creeperAlert: 'CREEPER BAT! JO AZKAR!',
     died: 'Hil zara! Itxaron bihar arte edo erosi pikotxa berri bat.',
-    buyPickaxe: 'Pikotxa Erosi'
+    buyPickaxe: 'Pikotxa Erosi',
+    enter: 'Sartu',
   },
   es: {
     gameTitle: 'SUBE AL BUS',
@@ -167,7 +170,7 @@ export const translations = {
     daySingle: 'día',
     remainingMonth: 'días restantes este mes',
     remainingMonthSingle: 'día restante este mes',
-    dayLabel: 'Día',
+    dayLabel: 'Dia',
     claim: 'Reclamar',
     done: 'Hecho',
     infoNote: 'Reclama una recompensa al día. Después de los 14 días, espera al mes siguiente.',
@@ -185,7 +188,8 @@ export const translations = {
     fuel: 'Combustible',
     creeperAlert: '¡UN CREEPER! ¡PULSA RÁPIDO!',
     died: '¡Has muerto! Espera a mañana o compra un pico nuevo.',
-    buyPickaxe: 'Comprar Pico'
+    buyPickaxe: 'Comprar Pico',
+    enter: 'Entrar',
   }
 };
 

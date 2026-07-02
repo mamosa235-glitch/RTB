@@ -32,10 +32,10 @@ interface ActionButtonsProps {
 const SUITS: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
 
 const baseBtn = `
-  flex-1 py-5 md:py-10 px-6 md:px-12 rounded-2xl md:rounded-[2.5rem] font-black text-lg md:text-3xl border-2 transition-all duration-150
-  focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-black
+  flex-1 py-4 px-4 rounded-xl font-bold text-base border transition-all duration-150
+  focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-black
   disabled:opacity-40 disabled:cursor-not-allowed
-  uppercase tracking-[0.2em]
+  uppercase tracking-wider
 `;
 
 export default function ActionButtons({

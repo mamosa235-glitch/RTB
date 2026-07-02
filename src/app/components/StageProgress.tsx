@@ -28,16 +28,16 @@ export default function StageProgress({ currentStageIndex, results }: StageProgr
         return (
           <React.Fragment key={`stage-progress-${i}`}>
             <div
-              className="w-10 h-10 md:w-16 md:h-16 rounded-full flex items-center justify-center font-bold text-xs md:text-xl transition-all duration-300"
+              className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all duration-300"
               style={{
                 ...(isCurrent ? {
                   background: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
-                  boxShadow: '0 0 25px rgba(59,130,246,0.9)',
+                  boxShadow: '0 0 12px rgba(59,130,246,0.7)',
                   color: '#ffffff',
-                  transform: 'scale(1.2)',
+                  transform: 'scale(1.15)',
                 } : isWin ? {
                   background: 'linear-gradient(135deg, #f97316 0%, #fb923c 100%)',
-                  boxShadow: '0 0 15px rgba(249,115,22,0.7)',
+                  boxShadow: '0 0 8px rgba(249,115,22,0.5)',
                   color: '#000000',
                 } : isLoss ? {
                   background: 'rgba(239,68,68,0.2)',
@@ -52,14 +52,14 @@ export default function StageProgress({ currentStageIndex, results }: StageProgr
               aria-current={isCurrent ? 'step' : undefined}
             >
               {isComplete ? (
-                isWin ? <CheckIcon size={18} className="md:w-10 md:h-10" strokeWidth={4} /> : <span className="md:text-2xl">✕</span>
+                isWin ? <CheckIcon size={14} strokeWidth={3} /> : <span>✕</span>
               ) : (
                 <span>{stage.shortLabel}</span>
               )}
             </div>
             {i < STAGES.length - 1 && (
               <div
-                className="h-px w-6 md:w-14 transition-all duration-500"
+                className="h-px w-5 transition-all duration-500"
                 style={{
                   background: i < currentStageIndex
                     ? 'linear-gradient(90deg, #f97316, rgba(59,130,246,0.4))'
