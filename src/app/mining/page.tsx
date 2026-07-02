@@ -531,17 +531,13 @@ export default function MiningPage() {
           )}
         </AnimatePresence>
 
-        <footer className="fixed bottom-0 left-0 right-0 z-[200] bg-black/80 backdrop-blur-md p-6 xs:p-8 pt-4 border-t border-white/5">
+        <footer className="fixed bottom-0 left-0 right-0 z-[200] bg-black/60 backdrop-blur-md p-6 xs:p-8 pt-4 border-t border-white/5">
           <section className="grid grid-cols-9 gap-2 xs:gap-3 w-full max-w-xl mx-auto">
             {miningState.inventory.map((item, i) => (
-              <motion.div
+              <div
                 key={`inv-slot-${i}`}
-                drag={item?.type === 'material'}
-                dragSnapToOrigin
-                onDragEnd={(e, info) => handleDragEnd(e, info, i)}
                 onClick={() => { if (item?.type === 'material' && item.isSmelted) sellItem(i); else setSelectedSlot(i); }}
                 className={inventorySlotClass(i)}
-                style={{ touchAction: 'none' }}
               >
                 {item?.type === 'pickaxe' && (
                   <div className="flex flex-col items-center w-full h-full p-1.5 pointer-events-none">
@@ -554,31 +550,36 @@ export default function MiningPage() {
                   </div>
                 )}
                 {item?.type === 'material' && (
-                  <div className="flex flex-col items-center pointer-events-none">
-                    <div className="w-6 h-6 relative overflow-hidden">
+                  <motion.div
+                    drag
+                    dragSnapToOrigin
+                    onDragEnd={(e, info) => handleDragEnd(e, info, i)}
+                    className="flex flex-col items-center cursor-grab active:cursor-grabbing z-50"
+                    style={{ touchAction: 'none' }}
+                  >
+                    <div className="w-6 h-6 relative overflow-hidden pointer-events-none">
                        <img src={getItemTexture(item.material!, item.isSmelted || false)} className="absolute inset-0 w-full h-full object-cover pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
                     </div>
-                    <span className="text-[10px] font-black mt-1 tabular-nums text-slate-200">{item.count}</span>
-                    {item.isSmelted && item.material !== 'coal' && <Zap size={8} className="absolute top-1 right-1 text-yellow-400 fill-yellow-400 animate-pulse" />}
-                  </div>
+                    <span className="text-[10px] font-black mt-1 tabular-nums text-slate-200 pointer-events-none">{item.count}</span>
+                    {item.isSmelted && item.material !== 'coal' && <Zap size={8} className="absolute top-1 right-1 text-yellow-400 fill-yellow-400 animate-pulse pointer-events-none" />}
+                  </motion.div>
                 )}
-              </motion.div>
+              </div>
             ))}
           </section>
         </footer>
       </main>
 
-      {/* Shop Modal with 7 Pages and Swiping */}
       <AnimatePresence>
         {showShop && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] bg-black flex flex-col touch-none"
+            className="fixed inset-0 z-[150] flex flex-col touch-none overflow-hidden"
           >
             {/* Custom Background per Page */}
-            <div className="absolute inset-0 z-0 overflow-hidden">
+            <div className="absolute inset-0 z-0 pointer-events-none">
                <motion.img
                  key={shopPage}
                  initial={{ scale: 1.1, opacity: 0 }}
@@ -587,7 +588,7 @@ export default function MiningPage() {
                  className="w-full h-full object-cover"
                  onError={(e) => { e.currentTarget.src = '/assets/mining/bg/background.png'; }}
                />
-               <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80" />
+               <div className="absolute inset-0 bg-black/20" />
             </div>
 
             <header className="relative z-10 w-full flex items-center justify-between px-6 py-6">
@@ -615,7 +616,7 @@ export default function MiningPage() {
                 }
               }}
             >
-              <div className="flex-1 relative flex flex-col justify-center px-6 py-8">
+              <div className="flex-1 relative overflow-y-auto px-6 py-4">
                 <AnimatePresence initial={false} custom={shopDirection}>
                   <motion.div
                     key={shopPage}
@@ -632,31 +633,32 @@ export default function MiningPage() {
                       x: { type: "spring", stiffness: 300, damping: 30 },
                       opacity: { duration: 0.2 }
                     }}
-                    className="absolute inset-x-6 flex flex-col items-center"
+                    className="w-full max-w-md mx-auto flex flex-col items-center pb-32"
                   >
                     {shopPage === 0 ? (
-                      <div className="grid gap-4 w-full max-w-md">
+                      <div className="grid gap-3 w-full">
                         {(['stone', 'iron', 'gold', 'redstone', 'diamond'] as PickaxeType[]).map(type => {
                           const config = PICKAXES[type];
                           const unlocked = miningState.unlockedPickaxes.includes(type);
                           return (
-                            <div key={type} className="bg-white/[0.03] border-2 border-white/5 rounded-3xl p-4 flex items-center justify-between group hover:bg-white/[0.07] hover:border-blue-500/30 transition-all shadow-2xl backdrop-blur-md">
-                              <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 bg-black/40 border border-white/10 rounded-2xl flex items-center justify-center shadow-inner relative overflow-hidden">
-                                   <Pickaxe size={32} className={type === 'stone' ? 'text-slate-400' : type === 'iron' ? 'text-slate-200' : type === 'gold' ? 'text-yellow-400' : type === 'redstone' ? 'text-red-500' : 'text-cyan-400'} />
+                            <div key={type} className="bg-white/[0.03] border-2 border-white/5 rounded-3xl p-3 xs:p-4 flex items-center justify-between group hover:bg-white/[0.07] hover:border-blue-500/30 transition-all shadow-2xl backdrop-blur-md">
+                              <div className="flex items-center gap-3 xs:gap-4">
+                                <div className="w-12 h-12 xs:w-16 xs:h-16 bg-black/40 border border-white/10 rounded-2xl flex items-center justify-center shadow-inner relative overflow-hidden">
+                                   <Pickaxe size={24} className={`${type === 'stone' ? 'text-slate-400' : type === 'iron' ? 'text-slate-200' : type === 'gold' ? 'text-yellow-400' : type === 'redstone' ? 'text-red-500' : 'text-cyan-400'} xs:hidden`} />
+                                   <Pickaxe size={32} className={`${type === 'stone' ? 'text-slate-400' : type === 'iron' ? 'text-slate-200' : type === 'gold' ? 'text-yellow-400' : type === 'redstone' ? 'text-red-500' : 'text-cyan-400'} hidden xs:block`} />
                                    {unlocked && <div className="absolute -top-1 -right-1 bg-green-500 rounded-full p-1 shadow-lg"><Zap size={10} className="text-black fill-black"/></div>}
                                 </div>
                                 <div className="flex flex-col">
-                                  <div className="font-black uppercase text-base tracking-widest text-white">{type}</div>
-                                  <div className="text-[10px] text-white/40 font-bold mt-1 uppercase flex items-center gap-2">
+                                  <div className="font-black uppercase text-xs xs:text-base tracking-widest text-white">{type}</div>
+                                  <div className="text-[8px] xs:text-[10px] text-white/40 font-bold mt-0.5 xs:mt-1 uppercase flex items-center gap-2">
                                     <span className="text-blue-400/80">{config.cost?.count} {config.cost?.material}</span>
-                                    {config.cost?.isSmelted && <span className="bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-md text-[8px]">SMELTED</span>}
+                                    {config.cost?.isSmelted && <span className="bg-blue-500/20 text-blue-300 px-1 py-0.5 rounded-md text-[6px] xs:text-[8px]">SMELTED</span>}
                                   </div>
                                 </div>
                               </div>
                               <button
                                 onClick={() => buyPickaxe(type)}
-                                className={`px-6 py-3 rounded-2xl font-black uppercase text-xs transition-all ${unlocked ? 'bg-white/10 text-white/40' : 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:scale-105 active:scale-95'}`}
+                                className={`px-4 py-2 xs:px-6 xs:py-3 rounded-2xl font-black uppercase text-[10px] xs:text-xs transition-all ${unlocked ? 'bg-white/10 text-white/40' : 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:scale-105 active:scale-95'}`}
                               >
                                 {unlocked ? 'OWNED' : 'BUY'}
                               </button>
@@ -665,12 +667,13 @@ export default function MiningPage() {
                         })}
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center text-center">
-                         <div className="w-32 h-32 bg-white/5 rounded-[2.5rem] flex items-center justify-center border border-white/10 mb-8">
-                            <ShoppingCart size={54} className="text-white/20"/>
+                      <div className="flex flex-col items-center justify-center text-center py-10">
+                         <div className="w-24 h-24 xs:w-32 xs:h-32 bg-white/5 rounded-[2.5rem] flex items-center justify-center border border-white/10 mb-8">
+                            <ShoppingCart size={40} className="text-white/20 xs:hidden"/>
+                            <ShoppingCart size={54} className="text-white/20 hidden xs:block"/>
                          </div>
-                         <h3 className="text-3xl font-black text-white/60 uppercase italic tracking-tighter">Under Construction</h3>
-                         <p className="text-sm text-white/30 font-bold max-w-[260px] mt-3">Check back later for more exotic items and trade routes.</p>
+                         <h3 className="text-2xl xs:text-3xl font-black text-white/60 uppercase italic tracking-tighter">Under Construction</h3>
+                         <p className="text-xs xs:text-sm text-white/30 font-bold max-w-[220px] xs:max-w-[260px] mt-3">Check back later for more exotic items and trade routes.</p>
                       </div>
                     )}
                   </motion.div>
@@ -678,7 +681,7 @@ export default function MiningPage() {
               </div>
 
               {/* Navigation Indicators */}
-              <div className="flex justify-center gap-2 mb-32">
+              <div className="flex justify-center gap-2 pb-36 pt-4 relative z-20">
                  {Array.from({ length: totalShopPages }).map((_, i) => (
                    <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${shopPage === i ? 'bg-blue-500 w-10' : 'bg-white/10 w-4'}`} />
                  ))}
