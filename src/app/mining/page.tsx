@@ -167,9 +167,18 @@ export default function MiningPage() {
     setTimeout(() => {
       const nextInv = [...miningState.inventory];
       const pick = { ...nextInv[pickIdx!]! };
-      pick.durability = (pick.durability || 0) - 1;
-      if (pick.durability <= 0) { nextInv[pickIdx!] = null; setSelectedSlot(null); }
-      else { nextInv[pickIdx!] = pick; }
+
+      // Wood pickaxe is unbreakable
+      if (pick.pickaxeType !== 'wood') {
+        pick.durability = (pick.durability || 0) - 1;
+        if (pick.durability <= 0) {
+          nextInv[pickIdx!] = null;
+          setSelectedSlot(null);
+        } else {
+          nextInv[pickIdx!] = pick;
+        }
+      }
+
       const updatedInv = addToInventory(nextInv, { type: 'material', material, count: 1, isSmelted: material === 'coal' });
       const newMined = minedBlocks.map((row, ry) => row.map((b, rx) => (ry === y && rx === x ? true : b)));
       setMinedBlocks(newMined);
@@ -372,7 +381,11 @@ export default function MiningPage() {
                 {item?.type === 'pickaxe' && (
                   <div className="flex flex-col items-center w-full h-full p-1">
                     <Pickaxe size={18} className={item.pickaxeType === 'wood' ? 'text-orange-800' : item.pickaxeType === 'stone' ? 'text-slate-400' : item.pickaxeType === 'iron' ? 'text-slate-200' : item.pickaxeType === 'gold' ? 'text-yellow-400' : item.pickaxeType === 'redstone' ? 'text-red-500' : 'text-cyan-400'} />
-                    <div className="absolute bottom-1.5 left-1.5 right-1.5 h-1 bg-black/60 rounded-full overflow-hidden"><div className="h-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.8)]" style={{ width: `${((item.durability || 0) / PICKAXES[item.pickaxeType!].durability) * 100}%` }} /></div>
+                    {item.pickaxeType !== 'wood' && (
+                      <div className="absolute bottom-1.5 left-1.5 right-1.5 h-1 bg-black/60 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.8)]" style={{ width: `${((item.durability || 0) / PICKAXES[item.pickaxeType!].durability) * 100}%` }} />
+                      </div>
+                    )}
                   </div>
                 )}
                 {item?.type === 'material' && (
@@ -415,7 +428,16 @@ export default function MiningPage() {
                     <div className="w-16 h-16 bg-black/80 border-2 border-orange-900/40 rounded-lg flex items-center justify-center relative group">
                       {miningState.furnace.fuel ? (
                         <div className="flex flex-col items-center">
-                          <img src={getItemTexture('coal', true)} className="w-8 h-8 pixel-art" />
+                          <img
+                            src={getItemTexture('coal', true)}
+                            className="w-8 h-8 pixel-art"
+                            onError={(e) => {
+                              const target = e.currentTarget as HTMLImageElement;
+                              if (!target.src.includes('blocks')) {
+                                target.src = getBlockTexture('coal');
+                              }
+                            }}
+                          />
                           <span className="text-[10px] font-black mt-1 text-orange-400">{miningState.furnace.fuel.count}</span>
                         </div>
                       ) : <Flame size={20} className="text-orange-900/30" />}
