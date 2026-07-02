@@ -327,7 +327,20 @@ export default function MiningPage() {
 
   return (
     <div className="min-h-screen felt-bg text-white flex flex-col select-none overflow-hidden relative">
-      <header className="w-full flex items-center justify-between px-4 py-2.5 bg-black/90 border-b border-blue-500/20 backdrop-blur-md z-50">
+      {/* Background Image Layer */}
+      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <img
+          src="/assets/mining/bg/background.png"
+          alt="Mining Background"
+          className="w-full h-full object-cover blur-none opacity-80 scale-100"
+          style={{ transformOrigin: 'center' }}
+          onError={(e) => (e.currentTarget.style.display = 'none')}
+        />
+        {/* Lighter dark overlay to ensure UI readability while keeping the image visible */}
+        <div className="absolute inset-0 bg-black/20" />
+      </div>
+
+      <header className="w-full flex items-center justify-between px-4 py-2.5 bg-black/80 border-b border-blue-500/20 backdrop-blur-md z-50">
         <button onClick={() => router.push('/')} className="p-2 bg-slate-900/50 border border-slate-800 text-slate-400 rounded-xl active:scale-95 transition-all"><ArrowLeft size={20} /></button>
         <div className="flex flex-col items-center">
           <span className="text-[10px] uppercase font-black tracking-[0.2em] text-blue-500/70">{t.mine}</span>
