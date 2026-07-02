@@ -49,9 +49,20 @@ export default function MiningPage() {
   const [creeperTimeLeft, setCreeperTimeLeft] = useState(10);
   const [showShop, setShowShop] = useState(false);
   const [showFurnace, setShowFurnace] = useState(false);
+  const showShopRef = useRef(showShop);
+  const showFurnaceRef = useRef(showFurnace);
+
+  useEffect(() => { showShopRef.current = showShop; }, [showShop]);
+  useEffect(() => { showFurnaceRef.current = showFurnace; }, [showFurnace]);
+
+  const [shopPage, setShopPage] = useState(0);
+  const [shopDirection, setShopDirection] = useState(0);
+  const totalShopPages = 7;
   const [timeToFreePick, setTimeToFreePick] = useState<string | null>(null);
 
   const furnaceInterval = useRef<any>(null);
+  const furnaceInputRef = useRef<HTMLDivElement>(null);
+  const furnaceFuelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const savedLang = (localStorage.getItem('rtb-lang') as Language) || 'en';
@@ -59,18 +70,42 @@ export default function MiningPage() {
     const mState = loadMiningState();
     if (mState.firstTime) {
       mState.inventory[0] = { type: 'pickaxe', pickaxeType: 'wood', durability: PICKAXES.wood.durability };
+      mState.grid = generateGrid(0, mState.unlockedPickaxes);
+      mState.minedBlocks = Array(5).fill(null).map(() => Array(5).fill(false));
       mState.firstTime = false;
     }
     setMiningState(mState);
-    setGrid(generateGrid(mState.depth));
+    setGrid(mState.grid || generateGrid(mState.depth, mState.unlockedPickaxes));
+    setMinedBlocks(mState.minedBlocks || Array(5).fill(null).map(() => Array(5).fill(false)));
     setBalance(loadBalance());
-  }, []);
+
+    // Back button handling
+    const handlePopState = (e: PopStateEvent) => {
+      if (showShopRef.current) {
+        setShowShop(false);
+      } else if (showFurnaceRef.current) {
+        setShowFurnace(false);
+      } else {
+        router.push('/');
+      }
+    };
+
+    window.history.pushState(null, '', window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [router]);
+
+  useEffect(() => {
+    if (showShop || showFurnace) {
+      window.history.pushState(null, '', window.location.pathname);
+    }
+  }, [showShop, showFurnace]);
 
   useEffect(() => {
     if (miningState.firstTime === false) {
-      saveMiningState(miningState);
+      saveMiningState({ ...miningState, grid, minedBlocks });
     }
-  }, [miningState]);
+  }, [miningState, grid, minedBlocks]);
 
   useEffect(() => {
     const checkFreeClaim = () => {
@@ -187,9 +222,11 @@ export default function MiningPage() {
       const isCleared = newMined.every(row => row.every(b => b));
       if (isCleared) {
         const nextDepth = miningState.depth + 1;
+        const nextGrid = generateGrid(nextDepth, miningState.unlockedPickaxes);
+        const nextMined = Array(5).fill(null).map(() => Array(5).fill(false));
+        setGrid(nextGrid);
+        setMinedBlocks(nextMined);
         setMiningState(prev => ({ ...prev, depth: nextDepth }));
-        setGrid(generateGrid(nextDepth));
-        setMinedBlocks(Array(5).fill(null).map(() => Array(5).fill(false)));
         if (nextDepth > 50 && Math.random() < 0.02 + (nextDepth / 10000)) { triggerCreeper(); }
       }
     }, 400 / speed);
@@ -206,9 +243,16 @@ export default function MiningPage() {
   };
 
   const explodeCreeper = () => {
-    setMiningState({ ...INITIAL_MINING_STATE, lastDeathTime: Date.now() });
-    setMinedBlocks(Array(5).fill(null).map(() => Array(5).fill(false)));
-    setGrid(generateGrid(0));
+    const freshGrid = generateGrid(0, INITIAL_MINING_STATE.unlockedPickaxes);
+    const freshMined = Array(5).fill(null).map(() => Array(5).fill(false));
+    setGrid(freshGrid);
+    setMinedBlocks(freshMined);
+    setMiningState({
+      ...INITIAL_MINING_STATE,
+      lastDeathTime: Date.now(),
+      grid: freshGrid,
+      minedBlocks: freshMined
+    });
     setCreeperActive(false);
     alert('BOOM!');
   };
@@ -311,6 +355,21 @@ export default function MiningPage() {
     setMiningState(prev => ({ ...prev, inventory: nextInv, furnace: { ...prev.furnace, output: null } }));
   };
 
+  const removeFromFurnace = (slotType: 'input' | 'fuel') => {
+    const item = miningState.furnace[slotType];
+    if (!item) return;
+    const nextInv = addToInventory(miningState.inventory, item);
+    setMiningState(prev => ({
+      ...prev,
+      inventory: nextInv,
+      furnace: {
+        ...prev.furnace,
+        [slotType]: null,
+        cookingStartTime: slotType === 'input' ? null : prev.furnace.cookingStartTime
+      }
+    }));
+  };
+
   const sellItem = (slotIdx: number) => {
     const item = miningState.inventory[slotIdx];
     if (!item || item.type !== 'material' || !item.isSmelted || item.material === 'coal') return;
@@ -322,8 +381,39 @@ export default function MiningPage() {
     window.dispatchEvent(new CustomEvent('rtb-update-balance', { detail: newBal }));
   };
 
+  const handleDragEnd = (event: any, info: any, slotIdx: number) => {
+    if (!showFurnace) return;
+    const item = miningState.inventory[slotIdx];
+    if (!item || item.type !== 'material') return;
+
+    const x = info.point.x;
+    const y = info.point.y;
+
+    if (furnaceInputRef.current) {
+      const rect = furnaceInputRef.current.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        addToFurnace(slotIdx, 'input');
+        return;
+      }
+    }
+
+    if (furnaceFuelRef.current) {
+      const rect = furnaceFuelRef.current.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        addToFurnace(slotIdx, 'fuel');
+        return;
+      }
+    }
+  };
+
   const getBlockTexture = (mat: Material) => `/assets/mining/blocks/${mat}.png`;
   const getItemTexture = (mat: Material, isSmelted: boolean) => isSmelted ? `/assets/mining/items/${mat}.png` : `/assets/mining/blocks/${mat}.png`;
+
+  const inventorySlotClass = (i: number) => `
+    aspect-square border-2 flex items-center justify-center relative cursor-pointer transition-all duration-100
+    w-[42px] h-[42px] sm:w-[54px] sm:h-[54px]
+    ${selectedSlot === i ? 'border-white bg-white/20 scale-105 z-10' : 'border-[#373737] bg-[#8B8B8B]/10 hover:border-[#555555]'}
+  `;
 
   return (
     <div className="min-h-screen felt-bg text-white flex flex-col select-none overflow-hidden relative">
@@ -332,11 +422,10 @@ export default function MiningPage() {
         <img
           src="/assets/mining/bg/background.png"
           alt="Mining Background"
-          className="w-full h-full object-cover blur-none opacity-80 scale-100"
+          className="w-full h-full object-cover blur-[4px] opacity-80 scale-100"
           style={{ transformOrigin: 'center' }}
           onError={(e) => (e.currentTarget.style.display = 'none')}
         />
-        {/* Lighter dark overlay to ensure UI readability while keeping the image visible */}
         <div className="absolute inset-0 bg-black/20" />
       </div>
 
@@ -351,180 +440,250 @@ export default function MiningPage() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col p-4 gap-6 overflow-y-auto pb-28 pt-6">
-        <section className="relative aspect-square w-full max-w-sm mx-auto bg-black/60 border-2 border-blue-500/30 rounded-2xl grid grid-cols-5 grid-rows-5 gap-1 p-2 shadow-[0_0_50px_rgba(59,130,246,0.15)] overflow-hidden">
+      <main className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto pb-28 pt-6">
+        <section className="relative aspect-square w-full max-w-sm mx-auto bg-black/40 border-4 border-[#373737] grid grid-cols-5 grid-rows-5 gap-0 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden">
           {grid.map((row, y) => row.map((mat, x) => (
-            <motion.div key={`${x}-${y}`} whileTap={{ scale: 0.95 }} onClick={() => handleMineBlock(x, y)} className={`relative rounded-sm cursor-pointer transition-all duration-300 ${minedBlocks[y][x] ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100'}`} style={{ backgroundColor: MATERIAL_COLORS[mat], boxShadow: 'inset -2px -2px 0 rgba(0,0,0,0.3), inset 2px 2px 0 rgba(255,255,255,0.1)' }}>
-              <img src={getBlockTexture(mat)} alt={mat} className="absolute inset-0 w-full h-full object-cover opacity-80 pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
-              {isMining && !minedBlocks[y][x] && <div className="absolute inset-0 bg-white/20 animate-pulse flex items-center justify-center"><Zap size={12} className="text-yellow-400" /></div>}
+            <motion.div key={`${x}-${y}`} whileTap={{ scale: 0.95 }} onClick={() => handleMineBlock(x, y)} className={`relative cursor-pointer transition-all duration-300 ${minedBlocks[y][x] ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100'}`} style={{ backgroundColor: MATERIAL_COLORS[mat] }}>
+              <img src={getBlockTexture(mat)} alt={mat} className="absolute inset-0 w-full h-full object-cover pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
+              {isMining && !minedBlocks[y][x] && <div className="absolute inset-0 bg-white/10 animate-pulse flex items-center justify-center"><Zap size={12} className="text-yellow-400" /></div>}
             </motion.div>
           )))}
         </section>
 
-        <section className="flex gap-6 justify-center">
-          <div className="flex flex-col items-center gap-2 group" onClick={() => setShowFurnace(true)}>
-             <div className="w-16 h-16 bg-black/60 border border-blue-500/30 rounded-2xl flex flex-col items-center justify-center relative active:scale-95 transition-all shadow-lg hover:border-blue-500/60 overflow-hidden">
-                <img src="/assets/mining/ui/furnace.png" className="absolute inset-0 w-full h-full object-cover opacity-40 pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
-                <Flame className={miningState.furnace.cookingStartTime ? "text-orange-500 animate-pulse drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]" : "text-slate-600"} size={28} />
-                {miningState.furnace.output && <div className="absolute top-1 right-1 w-3 h-3 bg-green-500 rounded-full animate-ping" />}
-             </div>
-             <span className="text-[10px] uppercase font-black tracking-widest text-slate-500 group-hover:text-blue-400 transition-colors">{t.furnace}</span>
-          </div>
-          <div className="flex flex-col items-center gap-2 group" onClick={() => { if(selectedSlot !== null) { const item = miningState.inventory[selectedSlot!]; if(item && item.type === 'pickaxe' && !confirm('Destroy?')) return; const ni = [...miningState.inventory]; ni[selectedSlot!] = null; setMiningState(p => ({...p, inventory: ni})); setSelectedSlot(null); } }}>
-             <div className="w-16 h-16 bg-black/60 border border-orange-500/30 rounded-2xl flex items-center justify-center relative active:scale-95 transition-all shadow-lg hover:border-orange-500/60 overflow-hidden">
-                <img src="/assets/mining/ui/lava.png" className="absolute inset-0 w-full h-full object-cover opacity-40 pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
-                <Trash2 className="text-orange-600 group-hover:text-orange-400 transition-colors" size={28} />
-             </div>
-             <span className="text-[10px] uppercase font-black tracking-widest text-slate-500 group-hover:text-orange-500 transition-colors">LAVA</span>
-          </div>
-          <div className="flex flex-col items-center gap-2 group" onClick={() => setShowShop(true)}>
-             <div className="w-16 h-16 bg-black/60 border border-blue-500/30 rounded-2xl flex items-center justify-center relative active:scale-95 transition-all shadow-lg hover:border-blue-500/60 overflow-hidden">
-                <img src="/assets/mining/ui/shop.png" className="absolute inset-0 w-full h-full object-cover opacity-40 pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
-                <ShoppingCart className="text-blue-500 group-hover:text-blue-400 transition-colors" size={28} />
-             </div>
-             <span className="text-[10px] uppercase font-black tracking-widest text-slate-500 group-hover:text-blue-500 transition-colors">SHOP</span>
-          </div>
+        <section className="flex gap-6 xs:gap-10 justify-center items-center py-2 xs:py-4">
+          <button className="group relative active:scale-90 transition-all focus:outline-none" onClick={() => setShowFurnace(!showFurnace)} style={{ filter: 'drop-shadow(0 0 12px rgba(148, 163, 184, 0.6))' }}>
+             <img src="/assets/mining/ui/furnace.png" className="w-12 h-12 xs:w-16 xs:h-16 object-contain pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
+             {miningState.furnace.output && <div className="absolute -top-1 -right-1 w-3 h-3 xs:w-4 xs:h-4 bg-green-500 rounded-full animate-ping" />}
+          </button>
+
+          <button className="group relative active:scale-90 transition-all focus:outline-none" onClick={() => { if(selectedSlot !== null) { const item = miningState.inventory[selectedSlot!]; if(item && item.type === 'pickaxe' && !confirm('Destroy?')) return; const ni = [...miningState.inventory]; ni[selectedSlot!] = null; setMiningState(p => ({...p, inventory: ni})); setSelectedSlot(null); } }} style={{ filter: 'drop-shadow(0 0 12px rgba(249, 115, 22, 0.6))' }}>
+             <img src="/assets/mining/ui/lava.png" className="w-12 h-12 xs:w-16 xs:h-16 object-contain pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
+          </button>
+
+          <button className="group relative active:scale-90 transition-all focus:outline-none" onClick={() => setShowShop(true)} style={{ filter: 'drop-shadow(0 0 12px rgba(168, 85, 247, 0.6))' }}>
+             <img src="/assets/mining/ui/shop.png" className="w-12 h-12 xs:w-16 xs:h-16 object-contain pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
+          </button>
         </section>
 
-        <div className="mt-auto space-y-3">
-          <div className="flex items-center justify-between px-1"><span className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-600">Inventory</span><span className="text-[10px] font-bold text-slate-700">9 SLOTS</span></div>
-          <section className="grid grid-cols-9 gap-2 w-full max-w-md mx-auto">
+        <AnimatePresence>
+          {showFurnace && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="w-full max-w-[280px] xs:max-w-sm mx-auto flex flex-col items-center gap-4 xs:gap-6 py-4 xs:py-6"
+            >
+              <div className="flex items-center gap-4 xs:gap-8">
+                <div className="flex flex-col gap-4 xs:gap-6">
+                  {/* Input Slot */}
+                  <div
+                    ref={furnaceInputRef}
+                    className="w-12 h-12 xs:w-16 xs:h-16 bg-[#373737] border-4 border-[#1e1e1e] flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner"
+                    onClick={() => removeFromFurnace('input')}
+                  >
+                    {miningState.furnace.input ? (
+                      <div className="flex flex-col items-center">
+                        <img src={getItemTexture(miningState.furnace.input.material!, false)} className="w-8 h-8 xs:w-10 xs:h-10 pixel-art" />
+                        <span className="absolute bottom-1 right-1 text-[8px] xs:text-[10px] font-black text-white drop-shadow-md">{miningState.furnace.input.count}</span>
+                      </div>
+                    ) : <span className="text-[8px] xs:text-[10px] text-white/10 font-black uppercase tracking-tighter">In</span>}
+                  </div>
+
+                  {/* Fuel Slot */}
+                  <div
+                    ref={furnaceFuelRef}
+                    className="w-12 h-12 xs:w-16 xs:h-16 bg-[#373737] border-4 border-[#1e1e1e] flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner"
+                    onClick={() => removeFromFurnace('fuel')}
+                  >
+                    {miningState.furnace.fuel ? (
+                      <div className="flex flex-col items-center">
+                        <img src={getItemTexture('coal', true)} className="w-8 h-8 xs:w-10 xs:h-10 pixel-art" />
+                        <span className="absolute bottom-1 right-1 text-[8px] xs:text-[10px] font-black text-white drop-shadow-md">{miningState.furnace.fuel.count}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Flame size={20} className="text-white/5 xs:hidden" />
+                        <Flame size={24} className="text-white/5 hidden xs:block" />
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center">
+                   <ArrowRight size={32} className={miningState.furnace.cookingStartTime ? "text-orange-500 animate-pulse xs:hidden" : "text-white/5 xs:hidden"} />
+                   <ArrowRight size={40} className={miningState.furnace.cookingStartTime ? "text-orange-500 animate-pulse hidden xs:block" : "text-white/5 hidden xs:block"} />
+                </div>
+
+                {/* Output Slot */}
+                <div
+                  className="w-16 h-16 xs:w-20 xs:h-20 bg-[#373737] border-4 border-[#1e1e1e] flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner"
+                  onClick={collectFurnace}
+                >
+                  {miningState.furnace.output ? (
+                    <div className="flex flex-col items-center">
+                      <img src={getItemTexture(miningState.furnace.output.material!, true)} className="w-10 h-10 xs:w-12 xs:h-12 pixel-art" />
+                      <span className="absolute bottom-1 right-1 text-[10px] xs:text-xs font-black text-green-400 drop-shadow-md">{miningState.furnace.output.count}</span>
+                    </div>
+                  ) : <span className="text-[8px] xs:text-[10px] text-white/10 font-black uppercase tracking-tighter">Out</span>}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <footer className="fixed bottom-0 left-0 right-0 z-[200] bg-black/80 backdrop-blur-md p-6 xs:p-8 pt-4 border-t border-white/5">
+          <section className="grid grid-cols-9 gap-2 xs:gap-3 w-full max-w-xl mx-auto">
             {miningState.inventory.map((item, i) => (
-              <div key={`slot-${i}`} onClick={() => { if (item?.type === 'material' && item.isSmelted) sellItem(i); else setSelectedSlot(i); }} className={`aspect-square rounded-xl border-2 flex items-center justify-center relative cursor-pointer transition-all duration-200 ${selectedSlot === i ? 'border-blue-500 bg-blue-500/10 scale-110 shadow-[0_0_15px_rgba(59,130,246,0.3)] z-10' : 'border-slate-800 bg-black/40 hover:border-slate-700'}`}>
+              <motion.div
+                key={`inv-slot-${i}`}
+                drag={item?.type === 'material'}
+                dragSnapToOrigin
+                onDragEnd={(e, info) => handleDragEnd(e, info, i)}
+                onClick={() => { if (item?.type === 'material' && item.isSmelted) sellItem(i); else setSelectedSlot(i); }}
+                className={inventorySlotClass(i)}
+                style={{ touchAction: 'none' }}
+              >
                 {item?.type === 'pickaxe' && (
-                  <div className="flex flex-col items-center w-full h-full p-1">
-                    <Pickaxe size={18} className={item.pickaxeType === 'wood' ? 'text-orange-800' : item.pickaxeType === 'stone' ? 'text-slate-400' : item.pickaxeType === 'iron' ? 'text-slate-200' : item.pickaxeType === 'gold' ? 'text-yellow-400' : item.pickaxeType === 'redstone' ? 'text-red-500' : 'text-cyan-400'} />
+                  <div className="flex flex-col items-center w-full h-full p-1.5 pointer-events-none">
+                    <Pickaxe size={22} className={item.pickaxeType === 'wood' ? 'text-orange-800' : item.pickaxeType === 'stone' ? 'text-slate-400' : item.pickaxeType === 'iron' ? 'text-slate-200' : item.pickaxeType === 'gold' ? 'text-yellow-400' : item.pickaxeType === 'redstone' ? 'text-red-500' : 'text-cyan-400'} />
                     {item.pickaxeType !== 'wood' && (
-                      <div className="absolute bottom-1.5 left-1.5 right-1.5 h-1 bg-black/60 rounded-full overflow-hidden">
+                      <div className="absolute bottom-1.5 left-1.5 right-1.5 h-1 bg-black/60 rounded-none overflow-hidden">
                         <div className="h-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.8)]" style={{ width: `${((item.durability || 0) / PICKAXES[item.pickaxeType!].durability) * 100}%` }} />
                       </div>
                     )}
                   </div>
                 )}
                 {item?.type === 'material' && (
-                  <div className="flex flex-col items-center">
-                    <div className="w-4 h-4 shadow-sm relative overflow-hidden" style={{ backgroundColor: MATERIAL_COLORS[item.material!] }}>
-                       <img src={getItemTexture(item.material!, item.isSmelted || false)} className="absolute inset-0 w-full h-full object-cover opacity-80 pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  <div className="flex flex-col items-center pointer-events-none">
+                    <div className="w-6 h-6 relative overflow-hidden">
+                       <img src={getItemTexture(item.material!, item.isSmelted || false)} className="absolute inset-0 w-full h-full object-cover pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
                     </div>
-                    <span className="text-[9px] font-black mt-1 tabular-nums text-slate-300">{item.count}</span>
+                    <span className="text-[10px] font-black mt-1 tabular-nums text-slate-200">{item.count}</span>
                     {item.isSmelted && item.material !== 'coal' && <Zap size={8} className="absolute top-1 right-1 text-yellow-400 fill-yellow-400 animate-pulse" />}
                   </div>
                 )}
-              </div>
+              </motion.div>
             ))}
           </section>
-        </div>
+        </footer>
       </main>
 
-      {/* Furnace Modal - Minecraft Style */}
-      <AnimatePresence>
-        {showFurnace && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6">
-            <div className="w-full max-w-sm bg-slate-900/60 border border-blue-500/20 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-              <img src="/assets/mining/ui/furnace_gui.png" className="absolute inset-0 w-full h-full object-contain opacity-20 pixel-art pointer-events-none" onError={(e) => (e.currentTarget.style.display = 'none')} />
-              <button onClick={() => setShowFurnace(false)} className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white transition-colors z-10"><X size={20}/></button>
-              <h2 className="text-xl font-black uppercase italic tracking-tighter text-blue-500 mb-8 text-center relative z-10">Furnace</h2>
-
-              <div className="flex flex-col items-center gap-6 relative z-10">
-                <div className="flex gap-10 items-center">
-                  <div className="flex flex-col gap-6">
-                    {/* Input Slot */}
-                    <div className="w-16 h-16 bg-black/80 border-2 border-slate-700 rounded-lg flex items-center justify-center relative group">
-                      {miningState.furnace.input ? (
-                        <div className="flex flex-col items-center">
-                          <img src={getItemTexture(miningState.furnace.input.material!, false)} className="w-8 h-8 pixel-art" />
-                          <span className="text-[10px] font-black mt-1 text-slate-300">{miningState.furnace.input.count}</span>
-                        </div>
-                      ) : <span className="text-[8px] text-slate-800 uppercase font-black">Input</span>}
-                    </div>
-                    {/* Fuel Slot */}
-                    <div className="w-16 h-16 bg-black/80 border-2 border-orange-900/40 rounded-lg flex items-center justify-center relative group">
-                      {miningState.furnace.fuel ? (
-                        <div className="flex flex-col items-center">
-                          <img
-                            src={getItemTexture('coal', true)}
-                            className="w-8 h-8 pixel-art"
-                            onError={(e) => {
-                              const target = e.currentTarget as HTMLImageElement;
-                              if (!target.src.includes('blocks')) {
-                                target.src = getBlockTexture('coal');
-                              }
-                            }}
-                          />
-                          <span className="text-[10px] font-black mt-1 text-orange-400">{miningState.furnace.fuel.count}</span>
-                        </div>
-                      ) : <Flame size={20} className="text-orange-900/30" />}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-center gap-2">
-                    <ArrowRight size={32} className={miningState.furnace.cookingStartTime ? "text-orange-500 animate-pulse" : "text-slate-800"} />
-                  </div>
-
-                  {/* Output Slot */}
-                  <div className="w-20 h-20 bg-black/80 border-4 border-slate-700 rounded-xl flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner" onClick={collectFurnace}>
-                    {miningState.furnace.output ? (
-                      <div className="flex flex-col items-center">
-                        <img src={getItemTexture(miningState.furnace.output.material!, true)} className="w-10 h-10 pixel-art" />
-                        <span className="text-xs font-black mt-1 text-green-400">{miningState.furnace.output.count}</span>
-                        <div className="absolute -top-3 -right-3 bg-green-500 text-[8px] px-2 py-1 rounded-full font-black text-black">COLLECT</div>
-                      </div>
-                    ) : <span className="text-[10px] text-slate-800 uppercase font-black">Result</span>}
-                  </div>
-                </div>
-
-                <div className="w-full border-t border-slate-800 pt-4">
-                  <div className="text-[9px] font-black uppercase text-slate-600 mb-3 tracking-widest text-center">Add from Inventory</div>
-                  <div className="grid grid-cols-5 gap-2">
-                    {miningState.inventory.map((item, i) => (item?.type === 'material' && (
-                      <button key={i} onClick={() => addToFurnace(i, item.material === 'coal' ? 'fuel' : 'input')} className="aspect-square bg-black/40 border border-slate-800 rounded-lg flex flex-col items-center justify-center p-1 active:scale-90 transition-all hover:border-blue-500/30">
-                        <img src={getItemTexture(item.material!, item.isSmelted || false)} className="w-4 h-4 pixel-art" />
-                        <span className="text-[8px] font-bold mt-1 text-slate-400">{item.count}</span>
-                      </button>
-                    )))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Shop Modal remains same layout but with pixel-art class on images if any */}
+      {/* Shop Modal with 7 Pages and Swiping */}
       <AnimatePresence>
         {showShop && (
-          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-xl flex flex-col p-6 overflow-y-auto">
-            <div className="flex justify-between items-center mb-10 mt-4">
-              <h2 className="text-3xl font-black uppercase italic tracking-tighter text-blue-500">Blacksmith</h2>
-              <button onClick={() => setShowShop(false)} className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500 hover:text-white active:scale-95 transition-all"><X size={24}/></button>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[150] bg-black flex flex-col touch-none"
+          >
+            {/* Custom Background per Page */}
+            <div className="absolute inset-0 z-0 overflow-hidden">
+               <motion.img
+                 key={shopPage}
+                 initial={{ scale: 1.1, opacity: 0 }}
+                 animate={{ scale: 1, opacity: 0.7 }}
+                 src={`/assets/mining/bg/shop${shopPage + 1}.png`}
+                 className="w-full h-full object-cover"
+                 onError={(e) => { e.currentTarget.src = '/assets/mining/bg/background.png'; }}
+               />
+               <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80" />
             </div>
-            <div className="grid gap-6 w-full max-w-md mx-auto pb-10">
-              {miningState.inventory.every(s => s?.type !== 'pickaxe') && (
-                <div className="bg-orange-500/5 border border-orange-500/20 rounded-3xl p-6 space-y-4 shadow-[0_0_30px_rgba(249,115,22,0.05)]">
-                  <div className="flex items-center gap-3"><Zap size={20} className="text-orange-500" /><div className="text-lg font-black uppercase text-orange-500 tracking-tight">Pickaxe Required</div></div>
-                  <div className="flex gap-3">
-                    <button onClick={() => buyWoodPickaxe('money')} disabled={balance < 5} className="flex-1 py-4 bg-orange-600 rounded-2xl font-black text-xs text-white shadow-lg active:translate-y-1 transition-all disabled:opacity-30">BUY WOOD ($5)</button>
-                    <button onClick={() => buyWoodPickaxe('free')} disabled={!!timeToFreePick} className="flex-1 py-4 bg-slate-800 rounded-2xl font-black text-xs text-slate-300 border border-slate-700 active:translate-y-1 transition-all disabled:opacity-30">
-                      {timeToFreePick ? <div className="flex items-center gap-2 justify-center"><Clock size={14}/> {timeToFreePick}</div> : "FREE CLAIM"}
-                    </button>
-                  </div>
-                </div>
-              )}
-              {(['stone', 'iron', 'gold', 'redstone', 'diamond'] as PickaxeType[]).map(type => {
-                const config = PICKAXES[type];
-                return (
-                  <div key={type} className="bg-slate-900/40 border border-slate-800 rounded-3xl p-5 flex items-center justify-between group hover:border-blue-500/20 transition-all shadow-xl">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 bg-black/60 border border-slate-800 rounded-2xl flex items-center justify-center shadow-inner">
-                         <Pickaxe size={24} className={type === 'stone' ? 'text-slate-400' : type === 'iron' ? 'text-slate-200' : type === 'gold' ? 'text-yellow-400' : type === 'redstone' ? 'text-red-500' : 'text-cyan-400'} />
+
+            <header className="relative z-10 w-full flex items-center justify-between px-6 py-6">
+              <div className="flex flex-col">
+                <h2 className="text-3xl font-black uppercase italic tracking-tighter text-blue-500 leading-none drop-shadow-glow-blue">Blacksmith</h2>
+              </div>
+              <button onClick={() => setShowShop(false)} className="p-3 bg-white/5 border border-white/10 rounded-2xl text-white/50 hover:text-white transition-all active:scale-90 shadow-2xl"><X size={28}/></button>
+            </header>
+
+            <motion.div
+              className="flex-1 relative z-10 overflow-hidden flex flex-col"
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              onDragEnd={(e, info) => {
+                if (info.offset.x < -100 && shopPage < totalShopPages - 1) {
+                  setShopDirection(1);
+                  setShopPage(p => p + 1);
+                }
+                if (info.offset.x > 100) {
+                   if (shopPage > 0) {
+                     setShopDirection(-1);
+                     setShopPage(p => p - 1);
+                   }
+                   else setShowShop(false);
+                }
+              }}
+            >
+              <div className="flex-1 relative flex flex-col justify-center px-6 py-8">
+                <AnimatePresence initial={false} custom={shopDirection}>
+                  <motion.div
+                    key={shopPage}
+                    custom={shopDirection}
+                    variants={{
+                      enter: (direction: number) => ({ x: direction > 0 ? 500 : -500, opacity: 0 }),
+                      center: { zIndex: 1, x: 0, opacity: 1 },
+                      exit: (direction: number) => ({ zIndex: 0, x: direction < 0 ? 500 : -500, opacity: 0 })
+                    }}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    transition={{
+                      x: { type: "spring", stiffness: 300, damping: 30 },
+                      opacity: { duration: 0.2 }
+                    }}
+                    className="absolute inset-x-6 flex flex-col items-center"
+                  >
+                    {shopPage === 0 ? (
+                      <div className="grid gap-4 w-full max-w-md">
+                        {(['stone', 'iron', 'gold', 'redstone', 'diamond'] as PickaxeType[]).map(type => {
+                          const config = PICKAXES[type];
+                          const unlocked = miningState.unlockedPickaxes.includes(type);
+                          return (
+                            <div key={type} className="bg-white/[0.03] border-2 border-white/5 rounded-3xl p-4 flex items-center justify-between group hover:bg-white/[0.07] hover:border-blue-500/30 transition-all shadow-2xl backdrop-blur-md">
+                              <div className="flex items-center gap-4">
+                                <div className="w-16 h-16 bg-black/40 border border-white/10 rounded-2xl flex items-center justify-center shadow-inner relative overflow-hidden">
+                                   <Pickaxe size={32} className={type === 'stone' ? 'text-slate-400' : type === 'iron' ? 'text-slate-200' : type === 'gold' ? 'text-yellow-400' : type === 'redstone' ? 'text-red-500' : 'text-cyan-400'} />
+                                   {unlocked && <div className="absolute -top-1 -right-1 bg-green-500 rounded-full p-1 shadow-lg"><Zap size={10} className="text-black fill-black"/></div>}
+                                </div>
+                                <div className="flex flex-col">
+                                  <div className="font-black uppercase text-base tracking-widest text-white">{type}</div>
+                                  <div className="text-[10px] text-white/40 font-bold mt-1 uppercase flex items-center gap-2">
+                                    <span className="text-blue-400/80">{config.cost?.count} {config.cost?.material}</span>
+                                    {config.cost?.isSmelted && <span className="bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-md text-[8px]">SMELTED</span>}
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => buyPickaxe(type)}
+                                className={`px-6 py-3 rounded-2xl font-black uppercase text-xs transition-all ${unlocked ? 'bg-white/10 text-white/40' : 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:scale-105 active:scale-95'}`}
+                              >
+                                {unlocked ? 'OWNED' : 'BUY'}
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div><div className="font-black uppercase text-sm tracking-widest text-slate-200">{type} Pickaxe</div><div className="text-[10px] text-slate-500 font-bold mt-1 uppercase">COST: {config.cost?.count} {config.cost?.material}</div></div>
-                    </div>
-                    <button onClick={() => buyPickaxe(type)} className="px-6 py-3 bg-blue-600 rounded-2xl font-black uppercase text-xs text-white shadow-lg active:translate-y-1 transition-all">BUY</button>
-                  </div>
-                );
-              })}
-            </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-center">
+                         <div className="w-32 h-32 bg-white/5 rounded-[2.5rem] flex items-center justify-center border border-white/10 mb-8">
+                            <ShoppingCart size={54} className="text-white/20"/>
+                         </div>
+                         <h3 className="text-3xl font-black text-white/60 uppercase italic tracking-tighter">Under Construction</h3>
+                         <p className="text-sm text-white/30 font-bold max-w-[260px] mt-3">Check back later for more exotic items and trade routes.</p>
+                      </div>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* Navigation Indicators */}
+              <div className="flex justify-center gap-2 mb-32">
+                 {Array.from({ length: totalShopPages }).map((_, i) => (
+                   <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${shopPage === i ? 'bg-blue-500 w-10' : 'bg-white/10 w-4'}`} />
+                 ))}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

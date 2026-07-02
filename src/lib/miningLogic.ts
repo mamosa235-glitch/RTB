@@ -27,6 +27,8 @@ export interface MiningState {
   firstTime: boolean;
   lastDeathTime: number | null;
   lastFreeClaimDate: string | null;
+  grid: Material[][] | null;
+  minedBlocks: boolean[][] | null;
 }
 
 export const PICKAXES: Record<PickaxeType, {
@@ -45,7 +47,7 @@ export const PICKAXES: Record<PickaxeType, {
     canMine: ['stone', 'coal', 'iron'],
     durability: 132,
     speed: 1.5,
-    cost: { material: 'coal', count: 64, isSmelted: false },
+    cost: { material: 'coal', count: 64, isSmelted: true },
   },
   iron: {
     canMine: ['stone', 'coal', 'iron', 'gold'],
@@ -113,6 +115,8 @@ export const INITIAL_MINING_STATE: MiningState = {
   firstTime: true,
   lastDeathTime: null,
   lastFreeClaimDate: null,
+  grid: null,
+  minedBlocks: null,
 };
 
 export function loadMiningState(): MiningState {
@@ -132,42 +136,52 @@ export function saveMiningState(state: MiningState) {
   localStorage.setItem('rtb-mining-state', JSON.stringify(state));
 }
 
-export function getMaterialProbability(depth: number): Record<Material, number> {
+export function getMaterialProbability(depth: number, unlockedPickaxes: PickaxeType[] = ['wood']): Record<Material, number> {
   const d = Math.max(0, depth);
+  const has = (type: PickaxeType) => unlockedPickaxes.includes(type);
 
-  // Rules:
-  // 0-100: Stone + Coal
-  // 101-500: Stone + Coal + Iron
-  // 501-1000: Stone + Coal + Iron + Gold (low)
-  // 1001-1101: Same + Redstone (low)
-  // 1102+: All. Coal abundant, Iron yes, Gold less, Redstone much less, Diamond extremely rare.
-
-  if (d <= 100) {
-    return { stone: 85, coal: 15, iron: 0, gold: 0, redstone: 0, diamond: 0 };
-  }
-  if (d <= 500) {
-    return { stone: 75, coal: 15, iron: 10, gold: 0, redstone: 0, diamond: 0 };
-  }
-  if (d <= 1000) {
-    return { stone: 70, coal: 15, iron: 10, gold: 5, redstone: 0, diamond: 0 };
-  }
-  if (d <= 1101) {
-    return { stone: 65, coal: 15, iron: 10, gold: 7, redstone: 3, diamond: 0 };
-  }
-
-  // 1102+
-  return {
-    stone: 55,
+  // Default probabilities
+  const probs: Record<Material, number> = {
+    stone: 80,
     coal: 20,
-    iron: 15,
-    gold: 6,
-    redstone: 3,
-    diamond: 1
+    iron: 0,
+    gold: 0,
+    redstone: 0,
+    diamond: 0
   };
+
+  if (has('stone')) {
+    probs.iron = 12;
+    probs.stone -= 6;
+    probs.coal -= 6;
+  }
+
+  if (has('iron')) {
+    probs.gold = 8;
+    probs.stone -= 4;
+    probs.iron -= 4;
+  }
+
+  if (has('gold')) {
+    probs.redstone = 5;
+    probs.stone -= 3;
+    probs.gold -= 2;
+  }
+
+  if (has('redstone')) {
+    // Diamonds are always rare, but scale slightly with depth
+    probs.diamond = Math.min(5, 1 + d / 500);
+    probs.stone -= probs.diamond;
+  }
+
+  // Ensure stone doesn't go below a reasonable floor
+  probs.stone = Math.max(10, probs.stone);
+
+  return probs;
 }
 
-export function generateBlock(depth: number): Material {
-  const probs = getMaterialProbability(depth);
+export function generateBlock(depth: number, unlockedPickaxes: PickaxeType[]): Material {
+  const probs = getMaterialProbability(depth, unlockedPickaxes);
   const total = Object.values(probs).reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
   for (const [mat, prob] of Object.entries(probs)) {
@@ -177,12 +191,12 @@ export function generateBlock(depth: number): Material {
   return 'stone';
 }
 
-export function generateGrid(depth: number): Material[][] {
+export function generateGrid(depth: number, unlockedPickaxes: PickaxeType[] = ['wood']): Material[][] {
   const grid: Material[][] = [];
   for (let y = 0; y < 5; y++) {
     const row: Material[] = [];
     for (let x = 0; x < 5; x++) {
-      row.push(generateBlock(depth + y));
+      row.push(generateBlock(depth, unlockedPickaxes));
     }
     grid.push(row);
   }
