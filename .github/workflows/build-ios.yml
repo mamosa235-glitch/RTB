@@ -12,7 +12,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 22.13.1
+
+      - name: Check Node version
+        run: node -v
 
       - run: npm install
 
