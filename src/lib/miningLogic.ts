@@ -1,10 +1,12 @@
 export type Material = 'stone' | 'coal' | 'iron' | 'gold' | 'redstone' | 'diamond';
 export type PickaxeType = 'wood' | 'stone' | 'iron' | 'gold' | 'redstone' | 'diamond';
+export type ItemType = 'material' | 'pickaxe' | 'tnt';
 
 export interface MiningItem {
-  type: 'material' | 'pickaxe';
+  type: ItemType;
   material?: Material;
   pickaxeType?: PickaxeType;
+  tntLevel?: number;
   count?: number;
   durability?: number;
   isSmelted?: boolean;
@@ -65,13 +67,13 @@ export const PICKAXES: Record<PickaxeType, {
     canMine: ['stone', 'coal', 'iron', 'gold', 'redstone', 'diamond'],
     durability: 500,
     speed: 2.5,
-    cost: { material: 'redstone', count: 256, isSmelted: false },
+    cost: { material: 'redstone', count: 256, isSmelted: true },
   },
   diamond: {
     canMine: ['stone', 'coal', 'iron', 'gold', 'redstone', 'diamond'],
     durability: 1562,
     speed: 3.5,
-    cost: { material: 'diamond', count: 320, isSmelted: false },
+    cost: { material: 'diamond', count: 320, isSmelted: true },
   },
 };
 
@@ -91,6 +93,14 @@ export const MATERIAL_SELL_PRICE: Record<Material, number> = {
   gold: 50,
   redstone: 20,
   diamond: 500,
+};
+
+export const TNT_COSTS: Record<number, { material: Material, count: number, isSmelted: boolean }> = {
+  1: { material: 'redstone', count: 10, isSmelted: true },
+  2: { material: 'redstone', count: 20, isSmelted: true },
+  3: { material: 'redstone', count: 30, isSmelted: true },
+  4: { material: 'redstone', count: 40, isSmelted: true },
+  5: { material: 'redstone', count: 50, isSmelted: true },
 };
 
 export const SMELTING_TIMES: Partial<Record<Material, number>> = {
@@ -213,6 +223,17 @@ export function addToInventory(inventory: (MiningItem | null)[], item: MiningIte
     for (let i = 0; i < nextInv.length; i++) {
       const slot = nextInv[i];
       if (slot && slot.type === 'material' && slot.material === item.material && slot.isSmelted === item.isSmelted && (slot.count || 0) < 64) {
+        const canAdd = 64 - (slot.count || 0);
+        const toAdd = Math.min(canAdd, item.count || 0);
+        slot.count = (slot.count || 0) + toAdd;
+        item.count = (item.count || 0) - toAdd;
+        if ((item.count || 0) <= 0) return nextInv;
+      }
+    }
+  } else if (item.type === 'tnt') {
+    for (let i = 0; i < nextInv.length; i++) {
+      const slot = nextInv[i];
+      if (slot && slot.type === 'tnt' && slot.tntLevel === item.tntLevel && (slot.count || 0) < 64) {
         const canAdd = 64 - (slot.count || 0);
         const toAdd = Math.min(canAdd, item.count || 0);
         slot.count = (slot.count || 0) + toAdd;

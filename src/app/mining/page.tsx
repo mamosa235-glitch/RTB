@@ -30,7 +30,8 @@ import {
   addToInventory,
   SMELTING_TIMES,
   MATERIAL_SELL_PRICE,
-  INITIAL_MINING_STATE
+  INITIAL_MINING_STATE,
+  TNT_COSTS
 } from '@/lib/miningLogic';
 import { loadBalance, saveBalance, formatBalance } from '@/lib/gameLogic';
 import { translations, Language } from '@/lib/translations';
@@ -78,6 +79,19 @@ export default function MiningPage() {
     setGrid(mState.grid || generateGrid(mState.depth, mState.unlockedPickaxes));
     setMinedBlocks(mState.minedBlocks || Array(5).fill(null).map(() => Array(5).fill(false)));
     setBalance(loadBalance());
+
+    // Developer Cheat Hook
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('give_redstone')) {
+      const amount = parseInt(urlParams.get('give_redstone') || '0');
+      if (amount > 0) {
+        setMiningState(prev => ({
+          ...prev,
+          inventory: addToInventory(prev.inventory, { type: 'material', material: 'redstone', count: amount, isSmelted: true })
+        }));
+        router.replace('/mining');
+      }
+    }
 
     // Back button handling
     const handlePopState = (e: PopStateEvent) => {
@@ -184,16 +198,56 @@ export default function MiningPage() {
   }, []);
 
   const t = translations[lang] || translations.en;
+  const hasWoodPickaxe = miningState.inventory.some(s => s?.type === 'pickaxe' && s.pickaxeType === 'wood');
 
   const handleMineBlock = useCallback((x: number, y: number) => {
     if (isMining || creeperActive || minedBlocks[y][x]) return;
     let pickIdx = selectedSlot;
-    let activePick = pickIdx !== null ? miningState.inventory[pickIdx] : null;
-    if (!activePick || activePick.type !== 'pickaxe' || (activePick.durability || 0) <= 0) {
+    let activeItem = pickIdx !== null ? miningState.inventory[pickIdx] : null;
+
+    // TNT Logic
+    if (activeItem?.type === 'tnt') {
+      const layers = activeItem.tntLevel || 1;
+      let finalInventory = [...miningState.inventory];
+
+      // Consume TNT
+      const nextTnt = { ...activeItem };
+      nextTnt.count = (nextTnt.count || 0) - 1;
+      finalInventory[pickIdx!] = nextTnt.count <= 0 ? null : nextTnt;
+      if (nextTnt.count <= 0) setSelectedSlot(null);
+
+      let currentDepth = miningState.depth;
+      let currentGrid = grid;
+      let currentMined = minedBlocks;
+
+      for (let l = 0; l < layers; l++) {
+        // Collect everything from current grid that isn't mined
+        for (let ry = 0; ry < 5; ry++) {
+          for (let rx = 0; rx < 5; rx++) {
+            if (!currentMined[ry][rx]) {
+              const mat = currentGrid[ry][rx];
+              finalInventory = addToInventory(finalInventory, { type: 'material', material: mat, count: 1, isSmelted: mat === 'coal' });
+            }
+          }
+        }
+        // Advance
+        currentDepth++;
+        currentGrid = generateGrid(currentDepth, miningState.unlockedPickaxes);
+        currentMined = Array(5).fill(null).map(() => Array(5).fill(false));
+      }
+
+      setGrid(currentGrid);
+      setMinedBlocks(currentMined);
+      setMiningState(prev => ({ ...prev, inventory: finalInventory, depth: currentDepth }));
+      return;
+    }
+
+    let activePick = activeItem?.type === 'pickaxe' ? activeItem : null;
+    if (!activePick || (activePick.durability || 0) <= 0) {
       pickIdx = miningState.inventory.findIndex(s => s?.type === 'pickaxe' && (s.durability || 0) > 0);
       if (pickIdx === -1) { alert(t.buyPickaxe); return; }
       setSelectedSlot(pickIdx);
-      activePick = miningState.inventory[pickIdx];
+      activePick = miningState.inventory[pickIdx] as any;
     }
     const material = grid[y][x];
     if (!canMine(activePick!.pickaxeType!, material)) return;
@@ -254,7 +308,7 @@ export default function MiningPage() {
       minedBlocks: freshMined
     });
     setCreeperActive(false);
-    alert('BOOM!');
+    alert(t.boom);
   };
 
   const tapCreeper = () => {
@@ -277,7 +331,7 @@ export default function MiningPage() {
     }
     const nextInv = [...miningState.inventory];
     const emptySlot = nextInv.findIndex(s => s === null);
-    if (emptySlot === -1) { alert('Full'); return; }
+    if (emptySlot === -1) { alert(t.full); return; }
     nextInv[emptySlot] = { type: 'pickaxe', pickaxeType: 'wood', durability: PICKAXES.wood.durability };
     setMiningState(prev => ({ ...prev, inventory: nextInv, lastDeathTime: null }));
     setShowShop(false);
@@ -289,7 +343,7 @@ export default function MiningPage() {
     const { material, count, isSmelted } = config.cost;
     let totalFound = 0;
     miningState.inventory.forEach(item => { if (item?.type === 'material' && item.material === material && item.isSmelted === isSmelted) totalFound += item.count || 0; });
-    if (totalFound < count) { alert(`Need ${count} ${material}${isSmelted ? ' (smelted)' : ''}`); return; }
+    if (totalFound < count) return;
     const nextInv = [...miningState.inventory];
     let remainingToRemove = count;
     for (let i = 0; i < nextInv.length; i++) {
@@ -303,10 +357,33 @@ export default function MiningPage() {
       }
     }
     const emptySlot = nextInv.findIndex(s => s === null);
-    if (emptySlot === -1) { alert('Inventory full'); return; }
+    if (emptySlot === -1) { alert(t.inventoryFull); return; }
     nextInv[emptySlot] = { type: 'pickaxe', pickaxeType: type, durability: config.durability };
     setMiningState(prev => ({ ...prev, inventory: nextInv, unlockedPickaxes: Array.from(new Set([...prev.unlockedPickaxes, type])) }));
-    setShowShop(false);
+  };
+
+  const buyTNT = (level: number) => {
+    const cost = TNT_COSTS[level];
+    if (!cost) return;
+    const { material, count, isSmelted } = cost;
+    let totalFound = 0;
+    miningState.inventory.forEach(item => { if (item?.type === 'material' && item.material === material && item.isSmelted === isSmelted) totalFound += item.count || 0; });
+    if (totalFound < count) return;
+
+    const nextInv = [...miningState.inventory];
+    let remainingToRemove = count;
+    for (let i = 0; i < nextInv.length; i++) {
+      const item = nextInv[i];
+      if (item?.type === 'material' && item.material === material && item.isSmelted === isSmelted) {
+        const take = Math.min(remainingToRemove, item.count || 0);
+        item.count = (item.count || 0) - take;
+        if (item.count <= 0) nextInv[i] = null;
+        remainingToRemove -= take;
+        if (remainingToRemove <= 0) break;
+      }
+    }
+    const updatedInv = addToInventory(nextInv, { type: 'tnt', tntLevel: level, count: 1 });
+    setMiningState(prev => ({ ...prev, inventory: updatedInv }));
   };
 
   const addToFurnace = (slotIdx: number, slotType: 'input' | 'fuel') => {
@@ -314,7 +391,7 @@ export default function MiningPage() {
     if (!item || item.type !== 'material') return;
 
     if (slotType === 'fuel') {
-      if (item.material !== 'coal') { alert('Only coal allowed as fuel'); return; }
+      if (item.material !== 'coal') { alert(t.onlyCoalFuel); return; }
       const nextInv = [...miningState.inventory];
       const toAdd = { ...item };
       const currentFuel = miningState.furnace.fuel;
@@ -330,8 +407,8 @@ export default function MiningPage() {
         setMiningState(prev => ({ ...prev, inventory: nextInv, furnace: { ...prev.furnace, fuel: toAdd } }));
       }
     } else {
-      if (item.isSmelted || item.material === 'stone' || item.material === 'coal') { alert('Not smeltable'); return; }
-      if (miningState.furnace.input && miningState.furnace.input.material !== item.material) { alert('Furnace busy'); return; }
+      if (item.isSmelted || item.material === 'stone' || item.material === 'coal') { alert(t.notSmeltable); return; }
+      if (miningState.furnace.input && miningState.furnace.input.material !== item.material) { alert(t.furnaceBusy); return; }
       const nextInv = [...miningState.inventory];
       const toAdd = { ...item };
       const currentInput = miningState.furnace.input;
@@ -381,37 +458,74 @@ export default function MiningPage() {
     window.dispatchEvent(new CustomEvent('rtb-update-balance', { detail: newBal }));
   };
 
+  const getInventoryMaterialCount = (material: Material, isSmelted: boolean) => {
+    return miningState.inventory.reduce((total, item) => {
+      if (item?.type === 'material' && item.material === material && item.isSmelted === isSmelted) {
+        return total + (item.count || 0);
+      }
+      return total;
+    }, 0);
+  };
+
+  const swapSlots = (from: number, to: number) => {
+    setMiningState(prev => {
+      const nextInv = [...prev.inventory];
+      const temp = nextInv[from];
+      nextInv[from] = nextInv[to];
+      nextInv[to] = temp;
+      return { ...prev, inventory: nextInv };
+    });
+    if (selectedSlot === from) setSelectedSlot(to);
+    else if (selectedSlot === to) setSelectedSlot(from);
+  };
+
   const handleDragEnd = (event: any, info: any, slotIdx: number) => {
-    if (!showFurnace) return;
     const item = miningState.inventory[slotIdx];
-    if (!item || item.type !== 'material') return;
+    if (!item) return;
 
     const x = info.point.x;
     const y = info.point.y;
 
-    if (furnaceInputRef.current) {
-      const rect = furnaceInputRef.current.getBoundingClientRect();
-      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-        addToFurnace(slotIdx, 'input');
-        return;
+    if (showFurnace && item.type === 'material') {
+      if (furnaceInputRef.current) {
+        const rect = furnaceInputRef.current.getBoundingClientRect();
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          addToFurnace(slotIdx, 'input');
+          return;
+        }
+      }
+
+      if (furnaceFuelRef.current) {
+        const rect = furnaceFuelRef.current.getBoundingClientRect();
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          addToFurnace(slotIdx, 'fuel');
+          return;
+        }
       }
     }
 
-    if (furnaceFuelRef.current) {
-      const rect = furnaceFuelRef.current.getBoundingClientRect();
-      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-        addToFurnace(slotIdx, 'fuel');
+    // Swap items in inventory
+    const elements = document.elementsFromPoint(x, y);
+    const targetSlot = elements.find(el => el.hasAttribute('data-slot-index'));
+    if (targetSlot) {
+      const targetIdx = parseInt(targetSlot.getAttribute('data-slot-index') || '-1');
+      if (targetIdx !== -1 && targetIdx !== slotIdx) {
+        swapSlots(slotIdx, targetIdx);
         return;
       }
     }
   };
 
   const getBlockTexture = (mat: Material) => `/assets/mining/blocks/${mat}.png`;
-  const getItemTexture = (mat: Material, isSmelted: boolean) => isSmelted ? `/assets/mining/items/${mat}.png` : `/assets/mining/blocks/${mat}.png`;
+  const getItemTexture = (item: MiningItem | Material, isSmelted: boolean = false) => {
+    if (typeof item === 'string') return isSmelted ? `/assets/mining/items/${item}.png` : `/assets/mining/blocks/${item}.png`;
+    if (item.type === 'tnt') return `/assets/mining/items/tnt/lvl${item.tntLevel}.png`;
+    return item.isSmelted ? `/assets/mining/items/${item.material}.png` : `/assets/mining/blocks/${item.material}.png`;
+  };
 
   const inventorySlotClass = (i: number) => `
     aspect-square border-2 flex items-center justify-center relative cursor-pointer transition-all duration-100
-    w-[42px] h-[42px] md:w-[70px] md:h-[70px]
+    w-full max-w-[38px] xs:max-w-[42px] md:max-w-[70px]
     ${selectedSlot === i ? 'border-white bg-white/20 scale-105 z-10' : 'border-[#373737] bg-[#8B8B8B]/10 hover:border-[#555555]'}
   `;
 
@@ -441,7 +555,7 @@ export default function MiningPage() {
       </header>
 
       <main className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto pb-32 md:pb-48 pt-6">
-        <section className="relative aspect-square w-full max-w-sm md:max-w-md mx-auto bg-black/40 border-4 border-[#373737] grid grid-cols-5 grid-rows-5 gap-0 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden">
+        <section className="flex-shrink-0 relative aspect-square w-full max-w-sm md:max-w-md mx-auto bg-black/40 border-4 border-[#373737] grid grid-cols-5 grid-rows-5 gap-0 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden">
           {grid.map((row, y) => row.map((mat, x) => (
             <motion.div key={`${x}-${y}`} whileTap={{ scale: 0.95 }} onClick={() => handleMineBlock(x, y)} className={`relative cursor-pointer transition-all duration-300 ${minedBlocks[y][x] ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100'}`} style={{ backgroundColor: MATERIAL_COLORS[mat] }}>
               <img src={getBlockTexture(mat)} alt={mat} className="absolute inset-0 w-full h-full object-cover pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
@@ -450,18 +564,18 @@ export default function MiningPage() {
           )))}
         </section>
 
-        <section className="flex gap-6 md:gap-20 justify-center items-center py-2 md:py-10">
-          <button className="group relative active:scale-90 transition-all focus:outline-none" onClick={() => setShowFurnace(!showFurnace)} style={{ filter: 'drop-shadow(0 0 12px rgba(148, 163, 184, 0.6))' }}>
-             <img src="/assets/mining/ui/furnace.png" className="w-12 h-12 md:w-32 md:h-32 object-contain pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
-             {miningState.furnace.output && <div className="absolute -top-1 -right-1 w-3 h-3 md:w-8 md:h-8 bg-green-500 rounded-full animate-ping" />}
+        <section className="flex gap-4 md:gap-20 justify-center items-center py-0.5 md:py-10">
+          <button className="group relative active:scale-90 transition-all focus:outline-none" onClick={() => setShowFurnace(!showFurnace)} style={{ filter: 'drop-shadow(0 0 8px rgba(148, 163, 184, 0.6))' }}>
+             <img src="/assets/mining/ui/furnace.png" className="w-6 h-6 md:w-32 md:h-32 object-contain pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
+             {miningState.furnace.output && <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 md:w-8 md:h-8 bg-green-500 rounded-full animate-ping" />}
           </button>
 
-          <button className="group relative active:scale-90 transition-all focus:outline-none" onClick={() => { if(selectedSlot !== null) { const item = miningState.inventory[selectedSlot!]; if(item && item.type === 'pickaxe' && !confirm('Destroy?')) return; const ni = [...miningState.inventory]; ni[selectedSlot!] = null; setMiningState(p => ({...p, inventory: ni})); setSelectedSlot(null); } }} style={{ filter: 'drop-shadow(0 0 12px rgba(249, 115, 22, 0.6))' }}>
-             <img src="/assets/mining/ui/lava.png" className="w-12 h-12 md:w-32 md:h-32 object-contain pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
+          <button className="group relative active:scale-90 transition-all focus:outline-none" onClick={() => { if(selectedSlot !== null) { const item = miningState.inventory[selectedSlot!]; if(item && item.type === 'pickaxe' && !confirm(t.destroyConfirm)) return; const ni = [...miningState.inventory]; ni[selectedSlot!] = null; setMiningState(p => ({...p, inventory: ni})); setSelectedSlot(null); } }} style={{ filter: 'drop-shadow(0 0 8px rgba(249, 115, 22, 0.6))' }}>
+             <img src="/assets/mining/ui/lava.png" className="w-6 h-6 md:w-32 md:h-32 object-contain pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
           </button>
 
-          <button className="group relative active:scale-90 transition-all focus:outline-none" onClick={() => setShowShop(true)} style={{ filter: 'drop-shadow(0 0 12px rgba(168, 85, 247, 0.6))' }}>
-             <img src="/assets/mining/ui/shop.png" className="w-12 h-12 md:w-32 md:h-32 object-contain pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
+          <button className="group relative active:scale-90 transition-all focus:outline-none" onClick={() => setShowShop(true)} style={{ filter: 'drop-shadow(0 0 8px rgba(168, 85, 247, 0.6))' }}>
+             <img src="/assets/mining/ui/shop.png" className="w-6 h-6 md:w-32 md:h-32 object-contain pixel-art" onError={(e) => (e.currentTarget.style.display = 'none')} />
           </button>
         </section>
 
@@ -471,38 +585,38 @@ export default function MiningPage() {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="w-full max-w-[280px] md:max-w-xl mx-auto flex flex-col items-center gap-4 md:gap-14 py-4 md:py-14"
+              className="w-full max-w-[150px] md:max-w-xl mx-auto flex flex-col items-center gap-0 py-0.5 md:py-14"
             >
-              <div className="flex items-center gap-4 md:gap-20">
-                <div className="flex flex-col gap-4 md:gap-14">
+              <div className="flex items-center gap-1 md:gap-20">
+                <div className="flex flex-col gap-0.5 md:gap-14">
                   {/* Input Slot */}
                   <div
                     ref={furnaceInputRef}
-                    className="w-12 h-12 md:w-32 md:h-32 bg-[#373737] border-4 border-[#1e1e1e] flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner"
+                    className="w-5 h-5 md:w-32 md:h-32 bg-[#373737] border-2 border-[#1e1e1e] flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner"
                     onClick={() => removeFromFurnace('input')}
                   >
                     {miningState.furnace.input ? (
                       <div className="flex flex-col items-center">
-                        <img src={getItemTexture(miningState.furnace.input.material!, false)} className="w-8 h-8 md:w-24 md:h-24 pixel-art" />
-                        <span className="absolute bottom-1 right-1 text-[8px] md:text-lg font-black text-white drop-shadow-md">{miningState.furnace.input.count}</span>
+                        <img src={getItemTexture(miningState.furnace.input.material!, false)} className="w-3 h-3 md:w-24 md:h-24 pixel-art" />
+                        <span className="absolute bottom-0 right-0 text-[4px] md:text-lg font-black text-white drop-shadow-md">{miningState.furnace.input.count}</span>
                       </div>
-                    ) : <span className="text-[8px] md:text-lg text-white/10 font-black uppercase tracking-tighter">In</span>}
+                    ) : <span className="text-[4px] md:text-lg text-white/10 font-black uppercase tracking-tighter">{t.inputShort}</span>}
                   </div>
 
                   {/* Fuel Slot */}
                   <div
                     ref={furnaceFuelRef}
-                    className="w-12 h-12 md:w-32 md:h-32 bg-[#373737] border-4 border-[#1e1e1e] flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner"
+                    className="w-5 h-5 md:w-32 md:h-32 bg-[#373737] border-2 border-[#1e1e1e] flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner"
                     onClick={() => removeFromFurnace('fuel')}
                   >
                     {miningState.furnace.fuel ? (
                       <div className="flex flex-col items-center">
-                        <img src={getItemTexture('coal', true)} className="w-8 h-8 md:w-24 md:h-24 pixel-art" />
-                        <span className="absolute bottom-1 right-1 text-[8px] md:text-lg font-black text-white drop-shadow-md">{miningState.furnace.fuel.count}</span>
+                        <img src={getItemTexture('coal', true)} className="w-3 h-3 md:w-24 md:h-24 pixel-art" />
+                        <span className="absolute bottom-0 right-0 text-[4px] md:text-lg font-black text-white drop-shadow-md">{miningState.furnace.fuel.count}</span>
                       </div>
                     ) : (
                       <>
-                        <Flame size={20} className="text-white/5 md:hidden" />
+                        <Flame size={8} className="text-white/5 md:hidden" />
                         <Flame size={48} className="text-white/5 hidden md:block" />
                       </>
                     )}
@@ -510,47 +624,69 @@ export default function MiningPage() {
                 </div>
 
                 <div className="flex flex-col items-center">
-                   <ArrowRight size={32} className={miningState.furnace.cookingStartTime ? "text-orange-500 animate-pulse md:hidden" : "text-white/5 md:hidden"} />
+                   <ArrowRight size={10} className={miningState.furnace.cookingStartTime ? "text-orange-500 animate-pulse md:hidden" : "text-white/5 md:hidden"} />
                    <ArrowRight size={80} className={miningState.furnace.cookingStartTime ? "text-orange-500 animate-pulse hidden md:block" : "text-white/5 hidden md:block"} />
                 </div>
 
                 {/* Output Slot */}
                 <div
-                  className="w-16 h-16 md:w-40 md:h-40 bg-[#373737] border-4 border-[#1e1e1e] flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner"
+                  className="w-8 h-8 md:w-40 md:h-40 bg-[#373737] border-2 border-[#1e1e1e] flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-inner"
                   onClick={collectFurnace}
                 >
                   {miningState.furnace.output ? (
                     <div className="flex flex-col items-center">
-                      <img src={getItemTexture(miningState.furnace.output.material!, true)} className="w-10 h-10 md:w-28 md:h-28 pixel-art" />
-                      <span className="absolute bottom-1 right-1 text-[10px] md:text-xl font-black text-green-400 drop-shadow-md">{miningState.furnace.output.count}</span>
+                      <img src={getItemTexture(miningState.furnace.output.material!, true)} className="w-5 h-5 md:w-28 md:h-28 pixel-art" />
+                      <span className="absolute bottom-0 right-0 text-[5px] md:text-xl font-black text-green-400 drop-shadow-md">{miningState.furnace.output.count}</span>
                     </div>
-                  ) : <span className="text-[8px] md:text-lg text-white/10 font-black uppercase tracking-tighter">Out</span>}
+                  ) : <span className="text-[4px] md:text-lg text-white/10 font-black uppercase tracking-tighter">{t.outputShort}</span>}
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <footer className="fixed bottom-0 left-0 right-0 z-[200] bg-black/60 backdrop-blur-md p-6 xs:p-8 pt-4 border-t border-white/5">
-          <section className="grid grid-cols-9 gap-2 xs:gap-3 w-full max-w-xl mx-auto">
+        <footer className="fixed bottom-0 left-0 right-0 z-[200] bg-[#0a0a0a] p-3 xs:p-4 border-t border-white/10">
+          <section className="grid grid-cols-9 gap-1 xs:gap-1.5 w-full max-w-xl mx-auto justify-items-center">
             {miningState.inventory.map((item, i) => (
               <div
                 key={`inv-slot-${i}`}
+                data-slot-index={i}
                 onClick={() => { if (item?.type === 'material' && item.isSmelted) sellItem(i); else setSelectedSlot(i); }}
                 className={inventorySlotClass(i)}
               >
                 {item?.type === 'pickaxe' && (
-                  <div className="flex items-center justify-center w-full h-full p-1 pointer-events-none relative">
+                  <motion.div
+                    drag
+                    dragSnapToOrigin
+                    onDragEnd={(e, info) => handleDragEnd(e, info, i)}
+                    className="flex items-center justify-center w-full h-full p-1 relative z-50 cursor-grab active:cursor-grabbing"
+                    style={{ touchAction: 'none' }}
+                  >
                     <Pickaxe
                       size={32}
                       className={item.pickaxeType === 'wood' ? 'text-orange-800' : item.pickaxeType === 'stone' ? 'text-slate-400' : item.pickaxeType === 'iron' ? 'text-slate-200' : item.pickaxeType === 'gold' ? 'text-yellow-400' : item.pickaxeType === 'redstone' ? 'text-red-500' : 'text-cyan-400'}
                     />
                     {item.pickaxeType !== 'wood' && (
-                      <div className="absolute bottom-1 left-1.5 right-1.5 h-1 bg-black/40 rounded-none overflow-hidden">
+                      <div className="absolute bottom-1 left-1.5 right-1.5 h-1 bg-black/40 rounded-none overflow-hidden pointer-events-none">
                         <div className="h-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.8)]" style={{ width: `${((item.durability || 0) / PICKAXES[item.pickaxeType!].durability) * 100}%` }} />
                       </div>
                     )}
-                  </div>
+                  </motion.div>
+                )}
+                {item?.type === 'tnt' && (
+                  <motion.div
+                    drag
+                    dragSnapToOrigin
+                    onDragEnd={(e, info) => handleDragEnd(e, info, i)}
+                    className="w-full h-full flex items-center justify-center relative cursor-grab active:cursor-grabbing z-50"
+                    style={{ touchAction: 'none' }}
+                  >
+                    <img
+                      src={getItemTexture(item)}
+                      className="w-full h-full object-contain pixel-art p-1.5 pointer-events-none"
+                    />
+                    <span className="absolute bottom-0.5 right-1 text-[10px] font-black tabular-nums text-white drop-shadow-md pointer-events-none">{item.count}</span>
+                  </motion.div>
                 )}
                 {item?.type === 'material' && (
                   <motion.div
@@ -596,10 +732,7 @@ export default function MiningPage() {
                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 h-full w-full" />
             </div>
 
-            <header className="relative z-10 w-full flex items-center justify-between px-6 py-6">
-              <div className="flex flex-col">
-                <h2 className="text-3xl font-black uppercase italic tracking-tighter text-blue-500 leading-none drop-shadow-glow-blue">Blacksmith</h2>
-              </div>
+            <header className="relative z-10 w-full flex items-center justify-end px-6 py-6">
               <button onClick={() => setShowShop(false)} className="p-3 bg-white/5 border border-white/10 rounded-2xl text-white/50 hover:text-white transition-all active:scale-90 shadow-2xl"><X size={28}/></button>
             </header>
 
@@ -626,30 +759,101 @@ export default function MiningPage() {
                     className="w-full max-w-md mx-auto"
                   >
                     {shopPage === 0 ? (
-                      <div className="grid gap-4">
+                      <div className="grid gap-3">
+                        {/* Wood Pickaxe Offer */}
+                        <div className="bg-white/[0.05] border-2 border-white/10 rounded-2xl p-3 flex items-center justify-between group transition-all shadow-xl backdrop-blur-md">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-black/40 border border-white/10 rounded-xl flex items-center justify-center relative overflow-hidden">
+                               <Pickaxe size={24} className="text-orange-800" />
+                            </div>
+                            <div className="flex flex-col flex-1 justify-center">
+                              <div className="font-black uppercase text-sm tracking-widest text-white">{t.woodPickaxe}</div>
+                              <div className="text-[10px] text-white/40 font-bold mt-0.5 uppercase">
+                                {timeToFreePick ? `${t.freeIn} ${timeToFreePick}` : t.freeClaim}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            {!timeToFreePick && (
+                              <button onClick={() => buyWoodPickaxe('free')} className="px-3 py-2 bg-green-600 text-white rounded-xl font-black flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all">
+                                <span className="text-[10px] uppercase">{t.free}</span>
+                                <Zap size={14} className="fill-white" />
+                              </button>
+                            )}
+                            <button onClick={() => buyWoodPickaxe('money')} className={`px-3 py-2 ${balance >= 5 ? 'bg-green-600' : 'bg-red-600'} text-white rounded-xl font-black flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all`}>
+                               <span className="text-sm">5</span>
+                               <span className="text-lg leading-none">$</span>
+                            </button>
+                          </div>
+                        </div>
+
                         {(['stone', 'iron', 'gold', 'redstone', 'diamond'] as PickaxeType[]).map(type => {
                           const config = PICKAXES[type];
                           const unlocked = miningState.unlockedPickaxes.includes(type);
+                          const canAfford = config.cost ? getInventoryMaterialCount(config.cost.material, config.cost.isSmelted) >= config.cost.count : false;
                           return (
-                            <div key={type} className="bg-white/[0.03] border-2 border-white/5 rounded-3xl p-4 flex items-center justify-between group hover:bg-white/[0.07] hover:border-blue-500/30 transition-all shadow-2xl backdrop-blur-md">
-                              <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 bg-black/40 border border-white/10 rounded-2xl flex items-center justify-center shadow-inner relative overflow-hidden">
-                                   <Pickaxe size={32} className={type === 'stone' ? 'text-slate-400' : type === 'iron' ? 'text-slate-200' : type === 'gold' ? 'text-yellow-400' : type === 'redstone' ? 'text-red-500' : 'text-cyan-400'} />
-                                   {unlocked && <div className="absolute -top-1 -right-1 bg-green-500 rounded-full p-1 shadow-lg"><Zap size={10} className="text-black fill-black"/></div>}
+                            <div key={type} className="bg-white/[0.03] border-2 border-white/5 rounded-2xl p-3 flex items-center justify-between group hover:bg-white/[0.07] hover:border-blue-500/30 transition-all shadow-xl backdrop-blur-md">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-black/40 border border-white/10 rounded-xl flex items-center justify-center shadow-inner relative overflow-hidden">
+                                   <Pickaxe size={24} className={type === 'stone' ? 'text-slate-400' : type === 'iron' ? 'text-slate-200' : type === 'gold' ? 'text-yellow-400' : type === 'redstone' ? 'text-red-500' : 'text-cyan-400'} />
+                                   {unlocked && <div className="absolute -top-1 -right-1 bg-green-500 rounded-full p-0.5 shadow-lg"><Zap size={8} className="text-black fill-black"/></div>}
                                 </div>
-                                <div className="flex flex-col">
-                                  <div className="font-black uppercase text-base tracking-widest text-white">{type}</div>
-                                  <div className="text-[10px] text-white/40 font-bold mt-1 uppercase flex items-center gap-2">
-                                    <span className="text-blue-400/80">{config.cost?.count} {config.cost?.material}</span>
-                                    {config.cost?.isSmelted && <span className="bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-md text-[8px]">SMELTED</span>}
-                                  </div>
+                                <div className="flex flex-col flex-1 items-center justify-center">
+                                  <div className="font-black uppercase text-sm tracking-widest text-white text-center w-full">{type}</div>
                                 </div>
                               </div>
                               <button
                                 onClick={() => buyPickaxe(type)}
-                                className={`px-6 py-3 rounded-2xl font-black uppercase text-xs transition-all ${unlocked ? 'bg-white/10 text-white/40' : 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:scale-105 active:scale-95'}`}
+                                className={`px-3 py-2 ${canAfford ? 'bg-green-600' : 'bg-red-600'} text-white rounded-xl font-black flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all`}
                               >
-                                {unlocked ? 'OWNED' : 'BUY'}
+                                <span className="text-sm">{config.cost?.count}</span>
+                                <img
+                                  src={getItemTexture(config.cost!.material, config.cost!.isSmelted)}
+                                  className="w-5 h-5 object-contain pixel-art"
+                                  alt={config.cost?.material}
+                                />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {/* Temporary Developer Button */}
+                        <button
+                          onClick={() => {
+                            setMiningState(prev => ({
+                              ...prev,
+                              inventory: addToInventory(prev.inventory, { type: 'material', material: 'redstone', count: 10, isSmelted: true })
+                            }));
+                          }}
+                          className="mt-2 py-1 bg-yellow-600/20 border border-yellow-600/40 text-yellow-500 rounded-xl font-black uppercase text-[8px] tracking-widest opacity-50 hover:opacity-100 transition-all"
+                        >
+                          DEBUG: +10 REDSTONE
+                        </button>
+                      </div>
+                    ) : shopPage === 1 ? (
+                      <div className="grid gap-3">
+                        {[1, 2, 3, 4, 5].map(level => {
+                          const cost = TNT_COSTS[level];
+                          const canAfford = getInventoryMaterialCount(cost.material, cost.isSmelted) >= cost.count;
+                          return (
+                            <div key={level} className="bg-white/[0.03] border-2 border-white/5 rounded-2xl p-3 flex items-center justify-between group hover:bg-white/[0.07] hover:border-blue-500/30 transition-all shadow-xl backdrop-blur-md">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-black/40 border border-white/10 rounded-xl flex items-center justify-center shadow-inner relative overflow-hidden">
+                                   <img src={`/assets/mining/items/tnt/lvl${level}.png`} className="w-8 h-8 object-contain pixel-art" onError={(e) => (e.currentTarget.src = '/assets/mining/ui/shop.png')} />
+                                </div>
+                                <div className="flex flex-col flex-1 items-center justify-center">
+                                  <div className="font-black uppercase text-sm tracking-widest text-white text-center w-full">{t.tnt} {t.level} {level}</div>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => buyTNT(level)}
+                                className={`px-3 py-2 ${canAfford ? 'bg-green-600' : 'bg-red-600'} text-white rounded-xl font-black flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all`}
+                              >
+                                <span className="text-sm">{cost.count}</span>
+                                <img
+                                  src={getItemTexture(cost.material, cost.isSmelted)}
+                                  className="w-5 h-5 object-contain pixel-art"
+                                  alt={cost.material}
+                                />
                               </button>
                             </div>
                           );
@@ -660,8 +864,8 @@ export default function MiningPage() {
                          <div className="w-32 h-32 bg-white/5 rounded-[2.5rem] flex items-center justify-center border border-white/10 mb-8">
                             <ShoppingCart size={54} className="text-white/20"/>
                          </div>
-                         <h3 className="text-3xl font-black text-white/60 uppercase italic tracking-tighter">Under Construction</h3>
-                         <p className="text-sm text-white/30 font-bold max-w-[260px] mt-3">Check back later for more exotic items and trade routes.</p>
+                         <h3 className="text-3xl font-black text-white/60 uppercase italic tracking-tighter">{t.underConstruction}</h3>
+                         <p className="text-sm text-white/30 font-bold max-w-[260px] mt-3">{t.checkBackLater}</p>
                       </div>
                     )}
                   </motion.div>
@@ -686,6 +890,12 @@ export default function MiningPage() {
                               size={32}
                               className={item.pickaxeType === 'wood' ? 'text-orange-800' : item.pickaxeType === 'stone' ? 'text-slate-400' : item.pickaxeType === 'iron' ? 'text-slate-200' : item.pickaxeType === 'gold' ? 'text-yellow-400' : item.pickaxeType === 'redstone' ? 'text-red-500' : 'text-cyan-400'}
                             />
+                          </div>
+                        )}
+                        {item?.type === 'tnt' && (
+                          <div className="w-full h-full flex items-center justify-center relative">
+                            <img src={getItemTexture(item)} className="w-full h-full object-contain pixel-art p-1.5" />
+                            <span className="absolute bottom-0.5 right-1 text-[10px] font-black text-white drop-shadow-md">{item.count}</span>
                           </div>
                         )}
                         {item?.type === 'material' && (
